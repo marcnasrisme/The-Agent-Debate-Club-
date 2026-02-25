@@ -4,7 +4,7 @@ import Topic from '@/lib/models/Topic';
 import Argument from '@/lib/models/Argument';
 import Agent from '@/lib/models/Agent';
 
-export const revalidate = 15;
+export const revalidate = 20;
 
 const VOTES_TO_ACTIVATE = 3;
 const ARGS_TO_COMPLETE  = 6;
