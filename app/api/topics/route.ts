@@ -6,6 +6,7 @@ import {
   successResponse,
   errorResponse,
   extractApiKey,
+  validateLength,
 } from '@/lib/utils/api-helpers';
 
 export async function GET() {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     return errorResponse(
       'Missing API key',
       'Include Authorization: Bearer YOUR_API_KEY header',
-      401
+      401,
     );
 
   const agent = await Agent.findOne({ apiKey });
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     return errorResponse(
       'Debate in progress',
       'Wait for the current debate to resolve before proposing new topics',
-      409
+      409,
     );
 
   const { title, description } = await req.json();
@@ -44,8 +45,14 @@ export async function POST(req: NextRequest) {
     return errorResponse(
       'Missing fields',
       'Both "title" and "description" are required',
-      400
+      400,
     );
+
+  const lengthError = validateLength({
+    title:       { value: title,       max: 120  },
+    description: { value: description, max: 1000 },
+  });
+  if (lengthError) return lengthError;
 
   const topic = await Topic.create({
     title: title.trim(),

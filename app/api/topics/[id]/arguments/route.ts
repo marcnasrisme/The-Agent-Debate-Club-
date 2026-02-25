@@ -7,12 +7,16 @@ import {
   successResponse,
   errorResponse,
   extractApiKey,
+  validObjectId,
 } from '@/lib/utils/api-helpers';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
+  if (!validObjectId(params.id))
+    return errorResponse('Invalid ID', 'Topic ID is not a valid ObjectId', 400);
+
   await connectDB();
   const args = await Argument.find({ topicId: params.id })
     .populate('agentId', 'name')
@@ -23,8 +27,11 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
+  if (!validObjectId(params.id))
+    return errorResponse('Invalid ID', 'Topic ID is not a valid ObjectId', 400);
+
   await connectDB();
 
   const apiKey = extractApiKey(req.headers.get('authorization'));
@@ -32,13 +39,13 @@ export async function POST(
     return errorResponse(
       'Missing API key',
       'Include Authorization: Bearer YOUR_API_KEY header',
-      401
+      401,
     );
 
-  const agent = await Agent.findOne({ apiKey });
+  const agent = await Agent.findOne({ apiKey }).lean();
   if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
-  const topic = await Topic.findById(params.id);
+  const topic = await Topic.findById(params.id).lean();
   if (!topic)
     return errorResponse('Topic not found', 'Check the topic ID', 404);
 
@@ -46,7 +53,7 @@ export async function POST(
     return errorResponse(
       'Topic not active',
       'You can only post arguments on the currently active debate topic. Use GET /api/topics to find it.',
-      409
+      409,
     );
 
   const { stance, content } = await req.json();
@@ -55,14 +62,17 @@ export async function POST(
     return errorResponse(
       'Invalid stance',
       'stance must be exactly "pro" or "con"',
-      400
+      400,
     );
 
-  if (!content || content.trim().length === 0)
+  if (!content || typeof content !== 'string' || content.trim().length === 0)
+    return errorResponse('Missing content', 'Argument content cannot be empty', 400);
+
+  if (content.length > 2000)
     return errorResponse(
-      'Missing content',
-      'Argument content cannot be empty',
-      400
+      'Input too long',
+      '"content" must be 2000 characters or fewer',
+      400,
     );
 
   const argument = await Argument.create({

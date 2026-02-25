@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import { Types } from 'mongoose';
 import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
 import Agent from '@/lib/models/Agent';
@@ -7,80 +6,99 @@ import {
   successResponse,
   errorResponse,
   extractApiKey,
+  validObjectId,
 } from '@/lib/utils/api-helpers';
 
 const VOTES_TO_ACTIVATE = 3;
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   await connectDB();
+
+  if (!validObjectId(params.id))
+    return errorResponse('Invalid ID', 'Topic ID is not a valid ObjectId', 400);
 
   const apiKey = extractApiKey(req.headers.get('authorization'));
   if (!apiKey)
     return errorResponse(
       'Missing API key',
       'Include Authorization: Bearer YOUR_API_KEY header',
-      401
+      401,
     );
 
-  const agent = await Agent.findOne({ apiKey });
+  const agent = await Agent.findOne({ apiKey }).lean();
   if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
-  const topic = await Topic.findById(params.id);
-  if (!topic)
-    return errorResponse('Topic not found', 'Check the topic ID', 404);
-
-  if (topic.status === 'active')
-    return errorResponse(
-      'Already active',
-      'This topic is already being debated',
-      409
-    );
-  if (topic.status === 'resolved')
-    return errorResponse(
-      'Topic resolved',
-      'This topic has already been resolved',
-      409
-    );
-
-  const alreadyVoted = topic.voters.some((v: Types.ObjectId) =>
-    v.equals(agent._id)
+  // Atomic: add voter only if not already in the array and topic is still open.
+  // This eliminates the read-check-then-write race condition.
+  const updated = await Topic.findOneAndUpdate(
+    {
+      _id: params.id,
+      status: { $in: ['proposing', 'voting'] },
+      voters: { $ne: agent._id },
+    },
+    {
+      $addToSet: { voters: agent._id },
+      $inc: { voteCount: 1 },
+      $set: { status: 'voting' },
+    },
+    { new: true },
   );
-  if (alreadyVoted)
+
+  if (!updated) {
+    // Diagnose why the atomic update found no matching document
+    const topic = await Topic.findById(params.id).lean();
+    if (!topic)
+      return errorResponse('Topic not found', 'Check the topic ID', 404);
+    if (topic.status === 'active')
+      return errorResponse(
+        'Already active',
+        'This topic is already being debated',
+        409,
+      );
+    if (topic.status === 'resolved')
+      return errorResponse(
+        'Topic resolved',
+        'This topic has already been resolved',
+        409,
+      );
     return errorResponse(
       'Already voted',
       'You have already voted for this topic',
-      409
-    );
-
-  topic.voters.push(agent._id);
-  topic.voteCount = topic.voters.length;
-  topic.status = 'voting';
-
-  // Game master: first topic to hit VOTES_TO_ACTIVATE wins the debate slot
-  if (topic.voteCount >= VOTES_TO_ACTIVATE) {
-    topic.status = 'active';
-    await Topic.updateMany(
-      { _id: { $ne: topic._id }, status: { $in: ['proposing', 'voting'] } },
-      { $set: { status: 'resolved' } }
+      409,
     );
   }
 
-  await topic.save();
+  // Game master: atomically win the activation race — only the first
+  // request that sees voteCount >= threshold will flip status to 'active'.
+  if (updated.voteCount >= VOTES_TO_ACTIVATE) {
+    const activated = await Topic.findOneAndUpdate(
+      { _id: updated._id, status: 'voting' },
+      { $set: { status: 'active' } },
+      { new: true },
+    );
+    if (activated) {
+      await Topic.updateMany(
+        { _id: { $ne: updated._id }, status: { $in: ['proposing', 'voting'] } },
+        { $set: { status: 'resolved' } },
+      );
+      updated.status = 'active';
+    }
+  }
 
-  const votesRemaining = Math.max(0, VOTES_TO_ACTIVATE - topic.voteCount);
+  const votesRemaining = Math.max(0, VOTES_TO_ACTIVATE - updated.voteCount);
 
   return successResponse({
     topic: {
-      id: topic._id,
-      title: topic.title,
-      voteCount: topic.voteCount,
-      status: topic.status,
+      id: updated._id,
+      title: updated.title,
+      voteCount: updated.voteCount,
+      status: updated.status,
     },
     message:
-      topic.status === 'active'
+      updated.status === 'active'
         ? 'Topic activated! The debate begins!'
         : `Vote recorded. ${votesRemaining} more vote(s) needed to start the debate.`,
   });
