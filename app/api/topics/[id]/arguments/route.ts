@@ -10,6 +10,8 @@ import {
   validObjectId,
 } from '@/lib/utils/api-helpers';
 
+const ARGS_TO_COMPLETE = 6;
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } },
@@ -82,5 +84,46 @@ export async function POST(
     content: content.trim(),
   });
 
-  return successResponse({ argument }, 201);
+  // Count all arguments now that the new one is saved
+  const argCount = await Argument.countDocuments({ topicId: topic._id });
+
+  if (argCount >= ARGS_TO_COMPLETE) {
+    // Atomically resolve — only the first request to see argCount >= threshold wins
+    const resolved = await Topic.findOneAndUpdate(
+      { _id: topic._id, status: 'active' },
+      { $set: { status: 'resolved' } },
+    );
+
+    if (resolved) {
+      // Promote the highest-voted queued topic (must have at least 1 vote)
+      const next = await Topic.findOneAndUpdate(
+        { status: { $in: ['proposing', 'voting'] }, voteCount: { $gte: 1 } },
+        { $set: { status: 'active' } },
+        { new: true, sort: { voteCount: -1, createdAt: 1 } },
+      );
+
+      return successResponse(
+        {
+          argument,
+          argCount,
+          debateComplete: true,
+          nextDebate: next ? { id: next._id, title: next.title, voteCount: next.voteCount } : null,
+          message: next
+            ? `Debate complete after ${ARGS_TO_COMPLETE} arguments! "${next.title}" is now live!`
+            : `Debate complete after ${ARGS_TO_COMPLETE} arguments! No queued topics — waiting for proposals.`,
+        },
+        201,
+      );
+    }
+  }
+
+  return successResponse(
+    {
+      argument,
+      argCount,
+      remaining: Math.max(0, ARGS_TO_COMPLETE - argCount),
+      message: `Argument posted. ${Math.max(0, ARGS_TO_COMPLETE - argCount)} more argument(s) until this debate resolves.`,
+    },
+    201,
+  );
 }

@@ -31,8 +31,9 @@ export async function POST(
   const agent = await Agent.findOne({ apiKey }).lean();
   if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
-  // Atomic: add voter only if not already in the array and topic is still open.
-  // This eliminates the read-check-then-write race condition.
+  // Votes are accepted on proposing/voting topics at all times — even while a
+  // debate is active. This builds the live queue so the next topic is ready
+  // the moment the current debate resolves.
   const updated = await Topic.findOneAndUpdate(
     {
       _id: params.id,
@@ -48,14 +49,13 @@ export async function POST(
   );
 
   if (!updated) {
-    // Diagnose why the atomic update found no matching document
     const topic = await Topic.findById(params.id).lean();
     if (!topic)
       return errorResponse('Topic not found', 'Check the topic ID', 404);
     if (topic.status === 'active')
       return errorResponse(
-        'Already active',
-        'This topic is already being debated',
+        'Debate in progress',
+        'You cannot vote on the topic currently being debated',
         409,
       );
     if (topic.status === 'resolved')
@@ -71,24 +71,26 @@ export async function POST(
     );
   }
 
-  // Game master: atomically win the activation race — only the first
-  // request that sees voteCount >= threshold will flip status to 'active'.
+  // Only activate when threshold is reached AND no debate is currently live.
+  // If a debate is active, the topic stays queued with status 'voting' and
+  // will be promoted automatically when the current debate reaches 6 arguments.
   if (updated.voteCount >= VOTES_TO_ACTIVATE) {
-    const activated = await Topic.findOneAndUpdate(
-      { _id: updated._id, status: 'voting' },
-      { $set: { status: 'active' } },
-      { new: true },
-    );
-    if (activated) {
-      await Topic.updateMany(
-        { _id: { $ne: updated._id }, status: { $in: ['proposing', 'voting'] } },
-        { $set: { status: 'resolved' } },
+    const activeTopic = await Topic.findOne({ status: 'active' }).lean();
+
+    if (!activeTopic) {
+      const activated = await Topic.findOneAndUpdate(
+        { _id: updated._id, status: 'voting' },
+        { $set: { status: 'active' } },
+        { new: true },
       );
-      updated.status = 'active';
+      if (activated) {
+        updated.status = 'active';
+      }
     }
   }
 
   const votesRemaining = Math.max(0, VOTES_TO_ACTIVATE - updated.voteCount);
+  const isQueued = updated.status === 'voting' && updated.voteCount >= VOTES_TO_ACTIVATE;
 
   return successResponse({
     topic: {
@@ -100,6 +102,8 @@ export async function POST(
     message:
       updated.status === 'active'
         ? 'Topic activated! The debate begins!'
-        : `Vote recorded. ${votesRemaining} more vote(s) needed to start the debate.`,
+        : isQueued
+          ? `Vote recorded. Topic is queued — waiting for the current debate to finish.`
+          : `Vote recorded. ${votesRemaining} more vote(s) needed to enter the queue.`,
   });
 }
