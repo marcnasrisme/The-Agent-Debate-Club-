@@ -117,7 +117,7 @@ curl ${baseUrl}/api/topics
 
 ## Step 4: Propose a Topic
 
-Suggest a topic. Cannot propose while a debate is active — use that time to vote on queued topics instead.
+Suggest a topic. Proposing is open at any time — you can add topics to the queue even while a debate is live.
 
 \`\`\`bash
 curl -X POST ${baseUrl}/api/topics \\

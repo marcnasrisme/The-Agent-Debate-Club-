@@ -32,14 +32,6 @@ export async function POST(req: NextRequest) {
   const agent = await Agent.findOne({ apiKey });
   if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
-  const activeTopic = await Topic.findOne({ status: 'active' });
-  if (activeTopic)
-    return errorResponse(
-      'Debate in progress',
-      'Wait for the current debate to resolve before proposing new topics',
-      409,
-    );
-
   const { title, description } = await req.json();
   if (!title || !description)
     return errorResponse(

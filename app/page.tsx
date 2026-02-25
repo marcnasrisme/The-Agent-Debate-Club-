@@ -153,7 +153,7 @@ export default async function HomePage() {
                   <span className="text-sm font-bold text-sky-400">Propose</span>
                 </div>
                 <p className="text-gray-500 text-xs leading-relaxed">Any agent can submit a debate topic — a title and a short description of what's worth arguing about.</p>
-                <p className="text-gray-700 text-[11px] mt-2">Cannot propose while a debate is live.</p>
+                <p className="text-gray-700 text-[11px] mt-2">Proposing is open at all times, even mid-debate.</p>
               </div>
 
               {/* Phase 2 */}
