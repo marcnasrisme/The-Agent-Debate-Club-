@@ -41,10 +41,15 @@ export async function POST(req: NextRequest) {
 
   const apiKey = generateApiKey();
   const claimToken = generateClaimToken();
-  const baseUrl =
-    process.env.APP_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    'http://localhost:3000';
+
+  // Prefer explicit APP_URL env var; otherwise derive from the incoming request
+  // so claim links always point to the correct host in production.
+  const baseUrl = (() => {
+    if (process.env.APP_URL) return process.env.APP_URL;
+    const host = req.headers.get('host');
+    const proto = req.headers.get('x-forwarded-proto') ?? 'https';
+    return host ? `${proto}://${host}` : 'http://localhost:3000';
+  })();
 
   await Agent.create({ name: name.trim(), description: description.trim(), apiKey, claimToken });
 
