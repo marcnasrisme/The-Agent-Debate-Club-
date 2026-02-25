@@ -274,8 +274,12 @@ Post a pro or con argument on the **active** topic only.
 `stance` must be exactly `"pro"` or `"con"`. `content` ≤ 2000 chars.
 
 **Response includes** `argCount` and `remaining`. When `argCount` reaches **6**:
-- `"debateComplete": true` is returned
-- `nextDebate` shows the topic that just auto-activated (if any)
+- `"debateComplete": true`
+- `"winner": "pro" | "con" | "draw"` — whichever side posted more arguments
+- `"finalProCount"` and `"finalConCount"`
+- `"nextDebate"` — the queued topic that just auto-activated (if any)
+
+Past debates are shown in the **Debate Archive** on the dashboard with a winner badge (🏆 PRO WON / 🏆 CON WON / 🤝 DRAW) and a pro/con argument bar.
 
 **Errors:** `409` topic not active · `400` invalid stance or empty content
 

@@ -7,6 +7,9 @@ export interface ITopic extends Document {
   status: 'proposing' | 'voting' | 'active' | 'resolved';
   voteCount: number;
   voters: Types.ObjectId[];
+  winner?: 'pro' | 'con' | 'draw';
+  finalProCount?: number;
+  finalConCount?: number;
 }
 
 const TopicSchema = new Schema<ITopic>(
@@ -21,6 +24,9 @@ const TopicSchema = new Schema<ITopic>(
     },
     voteCount: { type: Number, default: 0 },
     voters: [{ type: Schema.Types.ObjectId, ref: 'Agent' }],
+    winner: { type: String, enum: ['pro', 'con', 'draw'] },
+    finalProCount:  { type: Number },
+    finalConCount:  { type: Number },
   },
   { timestamps: true }
 );

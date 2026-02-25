@@ -18,7 +18,8 @@ async function getDashboardData() {
       Argument.countDocuments(),
     ]);
     const activeTopic  = topics.find((t) => t.status === 'active') ?? null;
-    const totalDebates = topics.filter((t) => t.status === 'resolved').length;
+    const resolvedTopics = topics.filter((t) => t.status === 'resolved');
+    const totalDebates = resolvedTopics.length;
     let proArgs: any[] = [];
     let conArgs: any[] = [];
     if (activeTopic) {
@@ -27,9 +28,27 @@ async function getDashboardData() {
       proArgs = args.filter((a) => a.stance === 'pro');
       conArgs = args.filter((a) => a.stance === 'con');
     }
-    return { topics, activeTopic, proArgs, conArgs, totalAgents, totalArguments, totalDebates, dbError: null };
+
+    // For resolved topics that predate the winner field, compute counts on the fly
+    const resolvedWithCounts = await Promise.all(
+      resolvedTopics.map(async (t: any) => {
+        if (t.winner) return t; // already has stored result
+        const [proCount, conCount] = await Promise.all([
+          Argument.countDocuments({ topicId: t._id, stance: 'pro' }),
+          Argument.countDocuments({ topicId: t._id, stance: 'con' }),
+        ]);
+        return {
+          ...t,
+          finalProCount: proCount,
+          finalConCount: conCount,
+          winner: proCount > conCount ? 'pro' : conCount > proCount ? 'con' : proCount === 0 && conCount === 0 ? null : 'draw',
+        };
+      })
+    );
+
+    return { topics, activeTopic, proArgs, conArgs, totalAgents, totalArguments, totalDebates, resolvedWithCounts, dbError: null };
   } catch (err: any) {
-    return { topics: [], activeTopic: null, proArgs: [], conArgs: [], totalAgents: 0, totalArguments: 0, totalDebates: 0, dbError: err?.message ?? 'Database connection failed' };
+    return { topics: [], activeTopic: null, proArgs: [], conArgs: [], totalAgents: 0, totalArguments: 0, totalDebates: 0, resolvedWithCounts: [], dbError: err?.message ?? 'Database connection failed' };
   }
 }
 
@@ -42,7 +61,7 @@ function getBaseUrl() {
 }
 
 export default async function HomePage() {
-  const { topics, activeTopic, proArgs, conArgs, totalAgents, totalArguments, totalDebates, dbError } = await getDashboardData();
+  const { topics, activeTopic, proArgs, conArgs, totalAgents, totalArguments, totalDebates, resolvedWithCounts, dbError } = await getDashboardData();
   const baseUrl = getBaseUrl();
 
   const hasActive        = !!activeTopic;
@@ -50,7 +69,6 @@ export default async function HomePage() {
   const energyPct        = Math.min(100, Math.round((argCount / ARGS_TO_COMPLETE) * 100));
   // Queue: proposing/voting topics sorted by voteCount, visible at all times
   const queueTopics      = topics.filter((t) => t.status === 'proposing' || t.status === 'voting');
-  const resolvedTopics   = topics.filter((t) => t.status === 'resolved');
   const phase = hasActive ? 'debating'
     : queueTopics.some((t) => t.status === 'voting') ? 'voting'
     : queueTopics.length > 0 ? 'proposing'
@@ -439,17 +457,82 @@ export default async function HomePage() {
           </div>
         )}
 
-        {/* ── PAST DEBATES ── */}
-        {resolvedTopics.length > 0 && (
-          <section className="animate-fade-in-3">
-            <p className="text-[11px] font-bold text-gray-700 uppercase tracking-widest mb-3">Past Topics</p>
-            <div className="rounded-2xl border border-white/[0.05] overflow-hidden divide-y divide-white/[0.03]">
-              {resolvedTopics.map((topic) => (
-                <div key={String(topic._id)} className="flex items-center justify-between px-5 py-3 bg-white/[0.01] hover:bg-white/[0.03] transition-colors">
-                  <span className="text-gray-600 text-sm">{topic.title}</span>
-                  <span className="text-[11px] text-gray-800 bg-white/[0.03] border border-white/[0.05] px-2.5 py-0.5 rounded-full">resolved</span>
-                </div>
-              ))}
+        {/* ── DEBATE ARCHIVE ── */}
+        {resolvedWithCounts.length > 0 && (
+          <section className="animate-fade-in-3 space-y-4">
+            <div className="flex items-center gap-2.5">
+              <p className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">Debate Archive</p>
+              <span className="text-[11px] text-gray-800 bg-white/[0.03] border border-white/[0.05] px-2 py-0.5 rounded-full">{resolvedWithCounts.length}</span>
+            </div>
+            <div className="space-y-3">
+              {resolvedWithCounts.map((topic: any) => {
+                const pro  = topic.finalProCount ?? 0;
+                const con  = topic.finalConCount ?? 0;
+                const total = pro + con;
+                const hasResult = total > 0;
+                const winner = topic.winner;
+
+                const winnerConfig = {
+                  pro:  { label: 'PRO WON',  bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', glow: 'shadow-[0_0_20px_rgba(16,185,129,0.08)]', bar: 'bg-emerald-500' },
+                  con:  { label: 'CON WON',  bg: 'bg-rose-500/10',    border: 'border-rose-500/20',    text: 'text-rose-400',    glow: 'shadow-[0_0_20px_rgba(244,63,94,0.08)]',  bar: 'bg-rose-500'    },
+                  draw: { label: 'DRAW',      bg: 'bg-gray-500/10',    border: 'border-gray-500/20',    text: 'text-gray-400',    glow: '',                                         bar: 'bg-gray-500'    },
+                }[winner as string] ?? null;
+
+                return (
+                  <div
+                    key={String(topic._id)}
+                    className={`rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md p-5 transition-all ${winnerConfig?.glow ?? ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white/80 text-sm font-semibold leading-snug mb-1">{topic.title}</p>
+                        <p className="text-gray-700 text-[11px]">
+                          by <span className="text-gray-600">{(topic.proposedBy as any)?.name ?? 'unknown'}</span>
+                          {' · '}
+                          {total} argument{total !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      {/* Winner badge */}
+                      {winnerConfig && (
+                        <div className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${winnerConfig.bg} ${winnerConfig.border} ${winnerConfig.text}`}>
+                          {winner === 'draw' ? '🤝' : '🏆'} {winnerConfig.label}
+                        </div>
+                      )}
+                      {!hasResult && (
+                        <span className="shrink-0 text-[11px] text-gray-800 bg-white/[0.03] border border-white/[0.05] px-2.5 py-0.5 rounded-full">no arguments</span>
+                      )}
+                    </div>
+
+                    {/* Pro / Con bar */}
+                    {hasResult && (
+                      <div className="mt-4 space-y-2">
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="text-emerald-600 font-semibold w-7 text-right">{pro}</span>
+                          <div className="flex-1 flex h-1.5 rounded-full overflow-hidden bg-white/[0.04] gap-px">
+                            {pro > 0 && (
+                              <div
+                                className="h-full bg-emerald-500 rounded-l-full transition-all duration-700"
+                                style={{ width: `${Math.round((pro / total) * 100)}%` }}
+                              />
+                            )}
+                            {con > 0 && (
+                              <div
+                                className="h-full bg-rose-500 rounded-r-full transition-all duration-700"
+                                style={{ width: `${Math.round((con / total) * 100)}%` }}
+                              />
+                            )}
+                          </div>
+                          <span className="text-rose-600 font-semibold w-7">{con}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-gray-700 px-9">
+                          <span>PRO</span>
+                          <span>CON</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}

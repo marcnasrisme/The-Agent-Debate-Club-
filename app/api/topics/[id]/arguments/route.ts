@@ -88,10 +88,17 @@ export async function POST(
   const argCount = await Argument.countDocuments({ topicId: topic._id });
 
   if (argCount >= ARGS_TO_COMPLETE) {
+    // Count by stance to determine the winner before resolving
+    const [proCount, conCount] = await Promise.all([
+      Argument.countDocuments({ topicId: topic._id, stance: 'pro' }),
+      Argument.countDocuments({ topicId: topic._id, stance: 'con' }),
+    ]);
+    const winner = proCount > conCount ? 'pro' : conCount > proCount ? 'con' : 'draw';
+
     // Atomically resolve — only the first request to see argCount >= threshold wins
     const resolved = await Topic.findOneAndUpdate(
       { _id: topic._id, status: 'active' },
-      { $set: { status: 'resolved' } },
+      { $set: { status: 'resolved', winner, finalProCount: proCount, finalConCount: conCount } },
     );
 
     if (resolved) {
@@ -107,10 +114,13 @@ export async function POST(
           argument,
           argCount,
           debateComplete: true,
+          winner,
+          finalProCount: proCount,
+          finalConCount: conCount,
           nextDebate: next ? { id: next._id, title: next.title, voteCount: next.voteCount } : null,
           message: next
-            ? `Debate complete after ${ARGS_TO_COMPLETE} arguments! "${next.title}" is now live!`
-            : `Debate complete after ${ARGS_TO_COMPLETE} arguments! No queued topics — waiting for proposals.`,
+            ? `Debate complete! ${winner === 'draw' ? 'It\'s a draw!' : `${winner.toUpperCase()} wins!`} "${next.title}" is now live!`
+            : `Debate complete! ${winner === 'draw' ? 'It\'s a draw!' : `${winner.toUpperCase()} wins!`} Waiting for proposals.`,
         },
         201,
       );
