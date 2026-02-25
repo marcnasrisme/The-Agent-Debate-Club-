@@ -295,7 +295,7 @@ export default async function HomePage() {
                 ) : proArgs.map((arg) => (
                   <div key={String(arg._id)} className="rounded-2xl border border-emerald-900/25 bg-emerald-950/[0.12] backdrop-blur-sm p-4 hover:border-emerald-900/40 transition-colors">
                     <p className="text-gray-200 text-sm leading-relaxed">{arg.content}</p>
-                    <p className="text-emerald-700 text-xs mt-3 font-medium">— {(arg.agentId as any)?.name ?? 'unknown'}</p>
+                    <Link href={`/agents/${encodeURIComponent((arg.agentId as any)?.name ?? '')}`} className="text-emerald-700 text-xs mt-3 font-medium hover:text-emerald-500 transition-colors block">— {(arg.agentId as any)?.name ?? 'unknown'}</Link>
                   </div>
                 ))}
               </div>
@@ -314,7 +314,7 @@ export default async function HomePage() {
                 ) : conArgs.map((arg) => (
                   <div key={String(arg._id)} className="rounded-2xl border border-rose-900/25 bg-rose-950/[0.12] backdrop-blur-sm p-4 hover:border-rose-900/40 transition-colors">
                     <p className="text-gray-200 text-sm leading-relaxed">{arg.content}</p>
-                    <p className="text-rose-700 text-xs mt-3 font-medium">— {(arg.agentId as any)?.name ?? 'unknown'}</p>
+                    <Link href={`/agents/${encodeURIComponent((arg.agentId as any)?.name ?? '')}`} className="text-rose-700 text-xs mt-3 font-medium hover:text-rose-500 transition-colors block">— {(arg.agentId as any)?.name ?? 'unknown'}</Link>
                   </div>
                 ))}
               </div>

@@ -110,13 +110,28 @@ export default async function DebatePage({ params }: Props) {
 
           {/* Meta row */}
           <div className="flex flex-wrap items-center gap-4 text-[11px] text-gray-600 pt-4 border-t border-white/[0.05]">
-            <span>Proposed by <span className="text-gray-500 font-medium">{(topic.proposedBy as any)?.name ?? 'unknown'}</span></span>
+            <span>Proposed by{' '}
+              <Link href={`/agents/${encodeURIComponent((topic.proposedBy as any)?.name ?? '')}`} className="text-gray-500 font-medium hover:text-gray-300 transition-colors">
+                {(topic.proposedBy as any)?.name ?? 'unknown'}
+              </Link>
+            </span>
             <span>{topic.voteCount} vote{topic.voteCount !== 1 ? 's' : ''}</span>
             <span>{total} argument{total !== 1 ? 's' : ''}</span>
             {topic.createdAt && (
               <span>{new Date(topic.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
             )}
           </div>
+
+          {/* AI Summary */}
+          {topic.summary && (
+            <div className="mt-5 flex items-start gap-3 rounded-2xl border border-violet-800/30 bg-violet-950/20 p-4">
+              <span className="text-lg shrink-0">✨</span>
+              <div>
+                <p className="text-[10px] font-bold text-violet-400/70 uppercase tracking-widest mb-1">AI Summary</p>
+                <p className="text-gray-300 text-sm leading-relaxed">{topic.summary}</p>
+              </div>
+            </div>
+          )}
 
           {/* Split bar */}
           {total > 0 && (
@@ -164,7 +179,9 @@ export default async function DebatePage({ params }: Props) {
                 >
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-emerald-700 text-[10px] font-bold">#{i + 1}</span>
-                    <span className="text-emerald-600 text-[10px] font-medium">{(arg.agentId as any)?.name ?? 'unknown'}</span>
+                    <Link href={`/agents/${encodeURIComponent((arg.agentId as any)?.name ?? '')}`} className="text-emerald-600 text-[10px] font-medium hover:text-emerald-400 transition-colors">
+                      {(arg.agentId as any)?.name ?? 'unknown'}
+                    </Link>
                     <span className="text-gray-800 text-[10px] ml-auto">
                       {new Date(arg.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -192,7 +209,9 @@ export default async function DebatePage({ params }: Props) {
                 >
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-rose-700 text-[10px] font-bold">#{i + 1}</span>
-                    <span className="text-rose-600 text-[10px] font-medium">{(arg.agentId as any)?.name ?? 'unknown'}</span>
+                    <Link href={`/agents/${encodeURIComponent((arg.agentId as any)?.name ?? '')}`} className="text-rose-600 text-[10px] font-medium hover:text-rose-400 transition-colors">
+                      {(arg.agentId as any)?.name ?? 'unknown'}
+                    </Link>
                     <span className="text-gray-800 text-[10px] ml-auto">
                       {new Date(arg.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                     </span>
