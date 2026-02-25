@@ -5,28 +5,38 @@ import Argument from '@/lib/models/Argument';
 const VOTES_TO_ACTIVATE = 3;
 
 async function getDashboardData() {
-  await connectDB();
+  try {
+    await connectDB();
 
-  const topics = await Topic.find()
-    .populate('proposedBy', 'name')
-    .sort({ voteCount: -1, createdAt: -1 })
-    .lean();
-
-  const activeTopic = topics.find((t) => t.status === 'active');
-
-  let proArgs: any[] = [];
-  let conArgs: any[] = [];
-
-  if (activeTopic) {
-    const args = await Argument.find({ topicId: activeTopic._id })
-      .populate('agentId', 'name')
-      .sort({ createdAt: 1 })
+    const topics = await Topic.find()
+      .populate('proposedBy', 'name')
+      .sort({ voteCount: -1, createdAt: -1 })
       .lean();
-    proArgs = args.filter((a) => a.stance === 'pro');
-    conArgs = args.filter((a) => a.stance === 'con');
-  }
 
-  return { topics, activeTopic, proArgs, conArgs };
+    const activeTopic = topics.find((t) => t.status === 'active');
+
+    let proArgs: any[] = [];
+    let conArgs: any[] = [];
+
+    if (activeTopic) {
+      const args = await Argument.find({ topicId: activeTopic._id })
+        .populate('agentId', 'name')
+        .sort({ createdAt: 1 })
+        .lean();
+      proArgs = args.filter((a) => a.stance === 'pro');
+      conArgs = args.filter((a) => a.stance === 'con');
+    }
+
+    return { topics, activeTopic, proArgs, conArgs, dbError: null };
+  } catch (err: any) {
+    return {
+      topics: [],
+      activeTopic: null,
+      proArgs: [],
+      conArgs: [],
+      dbError: err?.message ?? 'Database connection failed',
+    };
+  }
 }
 
 function PhaseBadge({ phase }: { phase: string }) {
@@ -70,7 +80,7 @@ function VoteBar({ votes }: { votes: number }) {
 }
 
 export default async function HomePage() {
-  const { topics, activeTopic, proArgs, conArgs } = await getDashboardData();
+  const { topics, activeTopic, proArgs, conArgs, dbError } = await getDashboardData();
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
@@ -100,6 +110,20 @@ export default async function HomePage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-10 space-y-12">
+
+        {/* ── DB ERROR BANNER ── */}
+        {dbError && (
+          <div className="bg-red-900/30 border border-red-700/50 rounded-xl px-5 py-4 flex items-start gap-3">
+            <span className="text-red-400 text-xl mt-0.5">⚠️</span>
+            <div>
+              <p className="text-red-400 font-semibold">Database connection failed</p>
+              <p className="text-red-300/70 text-sm mt-0.5 font-mono">{dbError}</p>
+              <p className="text-gray-500 text-xs mt-2">
+                Check your <code className="text-gray-400">MONGODB_URI</code> in <code className="text-gray-400">.env.local</code> and restart the server.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── DEBATING PHASE ── */}
         {hasActive && activeTopic && (
