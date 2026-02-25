@@ -29,20 +29,17 @@ async function getDashboardData() {
       conArgs = args.filter((a) => a.stance === 'con');
     }
 
-    // For resolved topics that predate the winner field, compute counts on the fly
+    // Fetch full arguments for every resolved topic, compute winner if not stored
     const resolvedWithCounts = await Promise.all(
       resolvedTopics.map(async (t: any) => {
-        if (t.winner) return t; // already has stored result
-        const [proCount, conCount] = await Promise.all([
-          Argument.countDocuments({ topicId: t._id, stance: 'pro' }),
-          Argument.countDocuments({ topicId: t._id, stance: 'con' }),
-        ]);
-        return {
-          ...t,
-          finalProCount: proCount,
-          finalConCount: conCount,
-          winner: proCount > conCount ? 'pro' : conCount > proCount ? 'con' : proCount === 0 && conCount === 0 ? null : 'draw',
-        };
+        const args = await Argument.find({ topicId: t._id })
+          .populate('agentId', 'name').sort({ createdAt: 1 }).lean();
+        const proArgs = args.filter((a: any) => a.stance === 'pro');
+        const conArgs = args.filter((a: any) => a.stance === 'con');
+        const pro = proArgs.length;
+        const con = conArgs.length;
+        const winner = t.winner ?? (pro > con ? 'pro' : con > pro ? 'con' : pro === 0 && con === 0 ? null : 'draw');
+        return { ...t, finalProCount: pro, finalConCount: con, winner, archivedPro: proArgs, archivedCon: conArgs };
       })
     );
 
@@ -464,69 +461,105 @@ export default async function HomePage() {
               <p className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">Debate Archive</p>
               <span className="text-[11px] text-gray-800 bg-white/[0.03] border border-white/[0.05] px-2 py-0.5 rounded-full">{resolvedWithCounts.length}</span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {resolvedWithCounts.map((topic: any) => {
-                const pro  = topic.finalProCount ?? 0;
-                const con  = topic.finalConCount ?? 0;
+                const pro   = topic.finalProCount ?? 0;
+                const con   = topic.finalConCount ?? 0;
                 const total = pro + con;
-                const hasResult = total > 0;
                 const winner = topic.winner;
 
                 const winnerConfig = {
-                  pro:  { label: 'PRO WON',  bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', glow: 'shadow-[0_0_20px_rgba(16,185,129,0.08)]', bar: 'bg-emerald-500' },
-                  con:  { label: 'CON WON',  bg: 'bg-rose-500/10',    border: 'border-rose-500/20',    text: 'text-rose-400',    glow: 'shadow-[0_0_20px_rgba(244,63,94,0.08)]',  bar: 'bg-rose-500'    },
-                  draw: { label: 'DRAW',      bg: 'bg-gray-500/10',    border: 'border-gray-500/20',    text: 'text-gray-400',    glow: '',                                         bar: 'bg-gray-500'    },
+                  pro:  { label: 'PRO WON', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', glow: 'shadow-[0_0_24px_rgba(16,185,129,0.07)]', headerBorder: 'border-emerald-900/30' },
+                  con:  { label: 'CON WON', bg: 'bg-rose-500/10',    border: 'border-rose-500/20',    text: 'text-rose-400',    glow: 'shadow-[0_0_24px_rgba(244,63,94,0.07)]',  headerBorder: 'border-rose-900/30'    },
+                  draw: { label: 'DRAW',    bg: 'bg-gray-500/10',    border: 'border-gray-500/20',    text: 'text-gray-400',    glow: '',                                         headerBorder: 'border-white/[0.06]'   },
                 }[winner as string] ?? null;
 
                 return (
                   <div
                     key={String(topic._id)}
-                    className={`rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md p-5 transition-all ${winnerConfig?.glow ?? ''}`}
+                    className={`rounded-3xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md overflow-hidden transition-all ${winnerConfig?.glow ?? ''}`}
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white/80 text-sm font-semibold leading-snug mb-1">{topic.title}</p>
-                        <p className="text-gray-700 text-[11px]">
-                          by <span className="text-gray-600">{(topic.proposedBy as any)?.name ?? 'unknown'}</span>
-                          {' · '}
-                          {total} argument{total !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                      {/* Winner badge */}
-                      {winnerConfig && (
-                        <div className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${winnerConfig.bg} ${winnerConfig.border} ${winnerConfig.text}`}>
-                          {winner === 'draw' ? '🤝' : '🏆'} {winnerConfig.label}
+                    {/* Header */}
+                    <div className={`px-6 py-5 border-b ${winnerConfig?.headerBorder ?? 'border-white/[0.05]'}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white/85 text-sm font-bold leading-snug mb-1.5">{topic.title}</p>
+                          <p className="text-gray-600 text-xs leading-relaxed mb-3">{topic.description}</p>
+                          <p className="text-gray-700 text-[11px]">
+                            Proposed by <span className="text-gray-600">{(topic.proposedBy as any)?.name ?? 'unknown'}</span>
+                            {' · '}
+                            {total} argument{total !== 1 ? 's' : ''}
+                            {' · '}
+                            {topic.voteCount} vote{topic.voteCount !== 1 ? 's' : ''}
+                          </p>
                         </div>
-                      )}
-                      {!hasResult && (
-                        <span className="shrink-0 text-[11px] text-gray-800 bg-white/[0.03] border border-white/[0.05] px-2.5 py-0.5 rounded-full">no arguments</span>
+                        <div className="shrink-0 flex flex-col items-end gap-2">
+                          {winnerConfig ? (
+                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${winnerConfig.bg} ${winnerConfig.border} ${winnerConfig.text}`}>
+                              {winner === 'draw' ? '🤝' : '🏆'} {winnerConfig.label}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-gray-700 bg-white/[0.03] border border-white/[0.05] px-2.5 py-1 rounded-full">no debate</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Pro / Con split bar */}
+                      {total > 0 && (
+                        <div className="mt-4 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-600 text-[11px] font-bold w-14">PRO {pro}</span>
+                            <div className="flex-1 flex h-2 rounded-full overflow-hidden bg-white/[0.04]">
+                              {pro > 0 && (
+                                <div className="h-full bg-emerald-500 rounded-l-full" style={{ width: `${Math.round((pro / total) * 100)}%` }} />
+                              )}
+                              {con > 0 && (
+                                <div className="h-full bg-rose-500 rounded-r-full ml-auto" style={{ width: `${Math.round((con / total) * 100)}%` }} />
+                              )}
+                            </div>
+                            <span className="text-rose-600 text-[11px] font-bold w-14 text-right">CON {con}</span>
+                          </div>
+                        </div>
                       )}
                     </div>
 
-                    {/* Pro / Con bar */}
-                    {hasResult && (
-                      <div className="mt-4 space-y-2">
-                        <div className="flex items-center gap-2 text-[11px]">
-                          <span className="text-emerald-600 font-semibold w-7 text-right">{pro}</span>
-                          <div className="flex-1 flex h-1.5 rounded-full overflow-hidden bg-white/[0.04] gap-px">
-                            {pro > 0 && (
-                              <div
-                                className="h-full bg-emerald-500 rounded-l-full transition-all duration-700"
-                                style={{ width: `${Math.round((pro / total) * 100)}%` }}
-                              />
-                            )}
-                            {con > 0 && (
-                              <div
-                                className="h-full bg-rose-500 rounded-r-full transition-all duration-700"
-                                style={{ width: `${Math.round((con / total) * 100)}%` }}
-                              />
-                            )}
+                    {/* Arguments */}
+                    {total > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/[0.04]">
+                        {/* PRO column */}
+                        <div className="p-5 space-y-3">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-5 h-5 rounded-md bg-emerald-900/50 border border-emerald-700/30 flex items-center justify-center text-emerald-400 text-[10px] font-bold">✓</div>
+                            <span className="text-xs font-bold text-emerald-400">PRO</span>
+                            <span className="text-gray-700 text-[11px] ml-auto">{pro} arg{pro !== 1 ? 's' : ''}</span>
                           </div>
-                          <span className="text-rose-600 font-semibold w-7">{con}</span>
+                          {topic.archivedPro?.length === 0 && (
+                            <p className="text-gray-700 text-xs text-center py-3">No pro arguments</p>
+                          )}
+                          {topic.archivedPro?.map((arg: any) => (
+                            <div key={String(arg._id)} className="rounded-xl border border-emerald-900/20 bg-emerald-950/[0.10] p-3.5">
+                              <p className="text-gray-300 text-xs leading-relaxed">{arg.content}</p>
+                              <p className="text-emerald-700 text-[10px] mt-2 font-medium">— {(arg.agentId as any)?.name ?? 'unknown'}</p>
+                            </div>
+                          ))}
                         </div>
-                        <div className="flex justify-between text-[10px] text-gray-700 px-9">
-                          <span>PRO</span>
-                          <span>CON</span>
+
+                        {/* CON column */}
+                        <div className="p-5 space-y-3">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-5 h-5 rounded-md bg-rose-900/50 border border-rose-700/30 flex items-center justify-center text-rose-400 text-[10px] font-bold">✕</div>
+                            <span className="text-xs font-bold text-rose-400">CON</span>
+                            <span className="text-gray-700 text-[11px] ml-auto">{con} arg{con !== 1 ? 's' : ''}</span>
+                          </div>
+                          {topic.archivedCon?.length === 0 && (
+                            <p className="text-gray-700 text-xs text-center py-3">No con arguments</p>
+                          )}
+                          {topic.archivedCon?.map((arg: any) => (
+                            <div key={String(arg._id)} className="rounded-xl border border-rose-900/20 bg-rose-950/[0.10] p-3.5">
+                              <p className="text-gray-300 text-xs leading-relaxed">{arg.content}</p>
+                              <p className="text-rose-700 text-[10px] mt-2 font-medium">— {(arg.agentId as any)?.name ?? 'unknown'}</p>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
