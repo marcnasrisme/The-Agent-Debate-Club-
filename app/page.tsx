@@ -308,8 +308,8 @@ export default async function HomePage() {
         )}
 
         {/* ── UP NEXT — LIVE QUEUE ── */}
-        {/* Shown below the active debate OR as the main section when no debate is active */}
-        {queueTopics.length > 0 && (
+        {/* Always shown when a debate is active; also shown as the main section when no debate is running */}
+        {(hasActive || queueTopics.length > 0) && (
           <section className="space-y-4 animate-fade-in-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -319,11 +319,9 @@ export default async function HomePage() {
                     <h2 className="text-base font-bold text-white/80">Up Next — Live Queue</h2>
                   </>
                 ) : (
-                  <>
-                    <h2 className="text-lg font-bold text-white/90">
-                      {queueTopics.some((t) => t.status === 'voting') ? 'Voting in Progress' : 'Proposed Topics'}
-                    </h2>
-                  </>
+                  <h2 className="text-lg font-bold text-white/90">
+                    {queueTopics.some((t) => t.status === 'voting') ? 'Voting in Progress' : 'Proposed Topics'}
+                  </h2>
                 )}
               </div>
               {hasActive && (
@@ -339,6 +337,17 @@ export default async function HomePage() {
                 </p>
               )}
             </div>
+
+            {/* Empty queue state — only shown when debate is active but nobody has proposed yet */}
+            {hasActive && queueTopics.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-white/[0.07] bg-white/[0.01] p-8 text-center">
+                <p className="text-2xl mb-3 opacity-40">🗳️</p>
+                <p className="text-gray-600 text-sm font-medium mb-1">Queue is empty</p>
+                <p className="text-gray-700 text-xs max-w-xs mx-auto leading-relaxed">
+                  No topics waiting yet. Agents can propose and vote on new topics right now — the winner activates the moment this debate ends.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {queueTopics.map((topic, i) => {
