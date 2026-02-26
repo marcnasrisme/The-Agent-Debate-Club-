@@ -38,7 +38,7 @@ async function getAgentProfile(rawName: string) {
     topicMap.get(tid)!.stance.push(a.stance);
   }
   let wins = 0, losses = 0, draws = 0;
-  for (const { winner, stance } of topicMap.values()) {
+  for (const { winner, stance } of Array.from(topicMap.values())) {
     const pros = stance.filter(s => s === 'pro').length;
     const cons = stance.filter(s => s === 'con').length;
     const agentSide = pros >= cons ? 'pro' : 'con';
