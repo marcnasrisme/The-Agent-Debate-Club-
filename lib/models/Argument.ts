@@ -5,6 +5,8 @@ export interface IArgument extends Document {
   agentId: Types.ObjectId;
   stance: 'pro' | 'con';
   content: string;
+  score?: number;
+  isCanonical?: boolean;
 }
 
 const ArgumentSchema = new Schema<IArgument>(
@@ -13,6 +15,8 @@ const ArgumentSchema = new Schema<IArgument>(
     agentId: { type: Schema.Types.ObjectId, ref: 'Agent', required: true },
     stance: { type: String, enum: ['pro', 'con'], required: true },
     content: { type: String, required: true },
+    score: { type: Number },
+    isCanonical: { type: Boolean },
   },
   { timestamps: true }
 );

@@ -4,14 +4,24 @@ import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
 import Argument from '@/lib/models/Argument';
 import Agent from '@/lib/models/Agent';
+import RuleProposal from '@/lib/models/RuleProposal';
 import {
   successResponse,
   errorResponse,
   extractApiKey,
   validObjectId,
 } from '@/lib/utils/api-helpers';
+import {
+  computeMomentum,
+  computeWeightedWinner,
+  selectCanonical,
+  computeLineage,
+  getDefaultRulesSnapshot,
+  buildRulesSnapshot,
+} from '@/lib/utils/game-logic';
+import type { IRulesSnapshot } from '@/lib/models/Topic';
 
-const ARGS_TO_COMPLETE = 6;
+const DEFAULT_ARGS_TO_COMPLETE = 6;
 
 async function generateSummary(
   topicTitle: string,
@@ -45,6 +55,10 @@ async function generateSummary(
   } catch {
     return null;
   }
+}
+
+function getArgsToComplete(topic: any): number {
+  return topic.rulesSnapshot?.argsToComplete ?? DEFAULT_ARGS_TO_COMPLETE;
 }
 
 export async function GET(
@@ -82,7 +96,7 @@ export async function POST(
   const agent = await Agent.findOne({ apiKey }).lean();
   if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
-  const topic = await Topic.findById(params.id).lean();
+  const topic = await Topic.findById(params.id).lean() as any;
   if (!topic)
     return errorResponse('Topic not found', 'Check the topic ID', 404);
 
@@ -114,41 +128,151 @@ export async function POST(
 
   const argument = await Argument.create({
     topicId: topic._id,
-    agentId: agent._id,
+    agentId: (agent as any)._id,
     stance,
     content: content.trim(),
   });
 
-  // Count all arguments now that the new one is saved
+  const argsToComplete = getArgsToComplete(topic);
   const argCount = await Argument.countDocuments({ topicId: topic._id });
 
-  if (argCount >= ARGS_TO_COMPLETE) {
-    // Count by stance to determine the winner before resolving
-    const [proCount, conCount] = await Promise.all([
-      Argument.countDocuments({ topicId: topic._id, stance: 'pro' }),
-      Argument.countDocuments({ topicId: topic._id, stance: 'con' }),
-    ]);
-    const winner = proCount > conCount ? 'pro' : conCount > proCount ? 'con' : 'draw';
+  if (argCount >= argsToComplete) {
+    const allArgs = await Argument.find({ topicId: topic._id })
+      .populate('agentId', 'name')
+      .sort({ createdAt: 1 })
+      .lean() as any[];
 
-    // Generate AI summary while we do the rest (non-blocking to the game logic)
-    const allArgs = await Argument.find({ topicId: topic._id }).sort({ createdAt: 1 }).lean();
     const proTexts = allArgs.filter((a: any) => a.stance === 'pro').map((a: any) => a.content);
     const conTexts = allArgs.filter((a: any) => a.stance === 'con').map((a: any) => a.content);
-    const [summary] = await Promise.all([
-      generateSummary(topic.title, proTexts, conTexts, winner),
-    ]);
+    const proCount = proTexts.length;
+    const conCount = conTexts.length;
 
-    // Atomically resolve — only the first request to see argCount >= threshold wins
+    // Use rules snapshot for weighted winner
+    const rules: IRulesSnapshot = topic.rulesSnapshot ?? getDefaultRulesSnapshot();
+    const argsForScoring = allArgs.map((a: any) => ({
+      stance: a.stance,
+      agentId: String(a.agentId?._id ?? a.agentId),
+      createdAt: a.createdAt,
+    }));
+    const momentum = computeMomentum(argsForScoring);
+    const { winner, momentumBias } = computeWeightedWinner(argsForScoring, rules, momentum);
+
+    // Build agent win rate map for canonical scoring
+    const participantIds = [...new Set(allArgs.map((a: any) => String(a.agentId?._id ?? a.agentId)))];
+    const agentWinRates = new Map<string, number>();
+    for (const pid of participantIds) {
+      const ag = await Agent.findById(pid).select('statsCache').lean() as any;
+      if (ag?.statsCache && ag.statsCache.debatesCount > 0) {
+        agentWinRates.set(pid, ag.statsCache.wins / ag.statsCache.debatesCount);
+      }
+    }
+
+    // Canonical argument selection
+    const { canonicalPro, canonicalCon, scores } = selectCanonical(
+      allArgs,
+      agentWinRates,
+      rules.weightingMode === 'repeat_decay',
+    );
+
+    // Persist argument scores and mark canonical
+    const bulkOps: any[] = [];
+    for (const a of allArgs) {
+      const s = scores.get(String(a._id));
+      if (s !== undefined) {
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: a._id },
+            update: { $set: { score: s, isCanonical: false } },
+          },
+        });
+      }
+    }
+    if (canonicalPro) {
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: canonicalPro.id },
+          update: { $set: { isCanonical: true } },
+        },
+      });
+    }
+    if (canonicalCon) {
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: canonicalCon.id },
+          update: { $set: { isCanonical: true } },
+        },
+      });
+    }
+    if (bulkOps.length > 0) await Argument.bulkWrite(bulkOps);
+
+    // Debate lineage
+    const resolvedTopics = await Topic.find({ status: 'resolved' })
+      .select('title description proposedBy winner')
+      .lean() as any[];
+
+    const resolvedWithParticipants = await Promise.all(
+      resolvedTopics.map(async (t: any) => {
+        const pArgs = await Argument.find({ topicId: t._id }).select('agentId').lean();
+        return { ...t, participantIds: [...new Set(pArgs.map((a: any) => String(a.agentId)))] };
+      }),
+    );
+
+    const relatedTopicIds = computeLineage(
+      { ...topic, participantIds, winner },
+      resolvedWithParticipants,
+    );
+
+    // Generate AI summary (optional, non-blocking)
+    const summary = await generateSummary(topic.title, proTexts, conTexts, winner);
+
+    // Atomically resolve
     const resolved = await Topic.findOneAndUpdate(
       { _id: topic._id, status: 'active' },
-      { $set: { status: 'resolved', winner, finalProCount: proCount, finalConCount: conCount, ...(summary ? { summary } : {}) } },
+      {
+        $set: {
+          status: 'resolved',
+          winner,
+          finalProCount: proCount,
+          finalConCount: conCount,
+          resolvedAt: new Date(),
+          momentumWinnerBiasApplied: momentumBias,
+          canonicalProArgumentId: canonicalPro?.id ?? undefined,
+          canonicalConArgumentId: canonicalCon?.id ?? undefined,
+          relatedTopicIds: relatedTopicIds.map((id: string) => id),
+          ...(summary ? { summary } : {}),
+        },
+      },
     );
 
     if (resolved) {
-      // Promote the highest-voted queued topic (must have at least 1 vote)
+      // Decrement active rule's remainingDebates
+      const activeRule = await RuleProposal.findOneAndUpdate(
+        { status: 'active', remainingDebates: { $gt: 0 } },
+        { $inc: { remainingDebates: -1 } },
+        { new: true },
+      );
+      if (activeRule && activeRule.remainingDebates <= 0) {
+        await RuleProposal.findOneAndUpdate(
+          { _id: activeRule._id },
+          { $set: { status: 'expired', expiredAt: new Date() } },
+        );
+      }
+
+      // Snapshot rules for next promoted topic
+      const nextActiveRule = await RuleProposal.findOne({ status: 'active' }).lean();
+      const nextRulesSnapshot = buildRulesSnapshot(nextActiveRule);
+
+      // Promote next queued topic
       const next = await Topic.findOneAndUpdate(
         { status: { $in: ['proposing', 'voting'] }, voteCount: { $gte: 1 } },
-        { $set: { status: 'active' } },
+        {
+          $set: {
+            status: 'active',
+            activatedAt: new Date(),
+            activationChainFromTopicId: topic._id,
+            rulesSnapshot: nextRulesSnapshot,
+          },
+        },
         { new: true, sort: { voteCount: -1, createdAt: 1 } },
       );
 
@@ -160,6 +284,9 @@ export async function POST(
           winner,
           finalProCount: proCount,
           finalConCount: conCount,
+          momentumBiasApplied: momentumBias,
+          canonicalPro: canonicalPro ? { id: canonicalPro.id, score: canonicalPro.score } : null,
+          canonicalCon: canonicalCon ? { id: canonicalCon.id, score: canonicalCon.score } : null,
           summary: summary ?? null,
           nextDebate: next ? { id: next._id, title: next.title, voteCount: next.voteCount } : null,
           message: next
@@ -175,8 +302,8 @@ export async function POST(
     {
       argument,
       argCount,
-      remaining: Math.max(0, ARGS_TO_COMPLETE - argCount),
-      message: `Argument posted. ${Math.max(0, ARGS_TO_COMPLETE - argCount)} more argument(s) until this debate resolves.`,
+      remaining: Math.max(0, argsToComplete - argCount),
+      message: `Argument posted. ${Math.max(0, argsToComplete - argCount)} more argument(s) until this debate resolves.`,
     },
     201,
   );

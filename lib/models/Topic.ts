@@ -1,5 +1,12 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+export interface IRulesSnapshot {
+  argsToComplete: number;
+  hideLiveCounts: boolean;
+  stallingPressure: boolean;
+  weightingMode: 'none' | 'first_last_boost' | 'repeat_decay';
+}
+
 export interface ITopic extends Document {
   title: string;
   description: string;
@@ -11,7 +18,26 @@ export interface ITopic extends Document {
   finalProCount?: number;
   finalConCount?: number;
   summary?: string;
+  season: number;
+  activatedAt?: Date;
+  resolvedAt?: Date;
+  activationChainFromTopicId?: Types.ObjectId;
+  canonicalProArgumentId?: Types.ObjectId;
+  canonicalConArgumentId?: Types.ObjectId;
+  momentumWinnerBiasApplied?: boolean;
+  relatedTopicIds: Types.ObjectId[];
+  rulesSnapshot?: IRulesSnapshot;
 }
+
+const RulesSnapshotSchema = new Schema(
+  {
+    argsToComplete:   { type: Number, default: 6 },
+    hideLiveCounts:   { type: Boolean, default: false },
+    stallingPressure: { type: Boolean, default: false },
+    weightingMode:    { type: String, enum: ['none', 'first_last_boost', 'repeat_decay'], default: 'none' },
+  },
+  { _id: false },
+);
 
 const TopicSchema = new Schema<ITopic>(
   {
@@ -29,6 +55,15 @@ const TopicSchema = new Schema<ITopic>(
     finalProCount: { type: Number },
     finalConCount: { type: Number },
     summary:       { type: String },
+    season:        { type: Number, default: 1 },
+    activatedAt:   { type: Date },
+    resolvedAt:    { type: Date },
+    activationChainFromTopicId: { type: Schema.Types.ObjectId, ref: 'Topic' },
+    canonicalProArgumentId:     { type: Schema.Types.ObjectId, ref: 'Argument' },
+    canonicalConArgumentId:     { type: Schema.Types.ObjectId, ref: 'Argument' },
+    momentumWinnerBiasApplied:  { type: Boolean },
+    relatedTopicIds: [{ type: Schema.Types.ObjectId, ref: 'Topic' }],
+    rulesSnapshot: { type: RulesSnapshotSchema },
   },
   { timestamps: true }
 );

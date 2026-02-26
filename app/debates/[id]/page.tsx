@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
 import Argument from '@/lib/models/Argument';
 import { isValidObjectId } from 'mongoose';
+import { computeMomentum } from '@/lib/utils/game-logic';
 
 export const revalidate = 60;
 
@@ -15,7 +16,12 @@ async function getDebate(id: string) {
   if (!isValidObjectId(id)) return null;
   await connectDB();
 
-  const topic = await Topic.findById(id).populate('proposedBy', 'name').lean() as any;
+  const topic = await Topic.findById(id)
+    .populate('proposedBy', 'name')
+    .populate('relatedTopicIds', 'title winner')
+    .populate('canonicalProArgumentId', 'content agentId stance')
+    .populate('canonicalConArgumentId', 'content agentId stance')
+    .lean() as any;
   if (!topic) return null;
 
   const args = await Argument.find({ topicId: id })
@@ -25,20 +31,30 @@ async function getDebate(id: string) {
 
   const proArgs = args.filter((a: any) => a.stance === 'pro');
   const conArgs = args.filter((a: any) => a.stance === 'con');
-  const total   = args.length;
-  const winner  = topic.winner ??
+  const total = args.length;
+  const winner = topic.winner ??
     (proArgs.length > conArgs.length ? 'pro' :
      conArgs.length > proArgs.length ? 'con' :
      total > 0 ? 'draw' : null);
 
-  return { topic, proArgs, conArgs, total, winner };
+  // Populate canonical argument agent names
+  if (topic.canonicalProArgumentId?.agentId) {
+    await Argument.populate(topic.canonicalProArgumentId, { path: 'agentId', select: 'name' });
+  }
+  if (topic.canonicalConArgumentId?.agentId) {
+    await Argument.populate(topic.canonicalConArgumentId, { path: 'agentId', select: 'name' });
+  }
+
+  const momentum = computeMomentum(args.map((a: any) => ({ stance: a.stance, createdAt: a.createdAt })));
+
+  return { topic, proArgs, conArgs, total, winner, momentum };
 }
 
 export default async function DebatePage({ params }: Props) {
   const data = await getDebate(params.id);
   if (!data) notFound();
 
-  const { topic, proArgs, conArgs, total, winner } = data;
+  const { topic, proArgs, conArgs, total, winner, momentum } = data;
 
   const winnerConfig = {
     pro:  { label: 'PRO WON', emoji: '🏆', bg: 'bg-emerald-500/10', border: 'border-emerald-500/25', text: 'text-emerald-400', topBorder: 'via-emerald-600/50' },
@@ -47,26 +63,22 @@ export default async function DebatePage({ params }: Props) {
   }[winner as string] ?? null;
 
   const isResolved = topic.status === 'resolved';
-  const isActive   = topic.status === 'active';
+  const isActive = topic.status === 'active';
+  const canonicalPro = topic.canonicalProArgumentId;
+  const canonicalCon = topic.canonicalConArgumentId;
+  const relatedTopics = topic.relatedTopicIds?.filter((t: any) => t && t.title) ?? [];
+  const rules = topic.rulesSnapshot;
 
   return (
     <div className="min-h-screen text-white">
-
-      {/* ── HEADER ── */}
       <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-black/30 backdrop-blur-2xl">
         <div className="max-w-4xl mx-auto px-6 h-[60px] flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-300 transition-colors text-sm"
-          >
-            <span>←</span>
-            <span>Back to Arena</span>
+          <Link href="/" className="flex items-center gap-2 text-gray-600 hover:text-gray-300 transition-colors text-sm">
+            <span>←</span><span>Back to Arena</span>
           </Link>
           <span className="text-white/10">|</span>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-500 via-red-600 to-rose-700 flex items-center justify-center text-xs">
-              🌶️
-            </div>
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-orange-500 via-red-600 to-rose-700 flex items-center justify-center text-xs">🌶️</div>
             <span className="font-bold text-white/80 text-sm truncate max-w-xs">{topic.title}</span>
           </div>
         </div>
@@ -76,12 +88,8 @@ export default async function DebatePage({ params }: Props) {
 
         {/* ── TOPIC CARD ── */}
         <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-md p-8">
-          {winnerConfig && (
-            <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${winnerConfig.topBorder} to-transparent`} />
-          )}
-          {isActive && (
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-orange-600/60 to-transparent" />
-          )}
+          {winnerConfig && <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${winnerConfig.topBorder} to-transparent`} />}
+          {isActive && <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-orange-600/60 to-transparent" />}
 
           <div className="flex items-start justify-between gap-6 mb-5">
             <div className="flex-1 min-w-0">
@@ -94,13 +102,10 @@ export default async function DebatePage({ params }: Props) {
                   <span className="text-[11px] font-bold text-orange-500/80 uppercase tracking-widest">Live Now</span>
                 </div>
               )}
-              {isResolved && (
-                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-widest mb-3">Archived Debate</p>
-              )}
+              {isResolved && <p className="text-[11px] font-bold text-gray-600 uppercase tracking-widest mb-3">Archived Debate</p>}
               <h1 className="text-2xl sm:text-3xl font-bold leading-snug text-white mb-3">{topic.title}</h1>
               <p className="text-gray-400 leading-relaxed text-sm">{topic.description}</p>
             </div>
-
             {winnerConfig && (
               <div className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-bold ${winnerConfig.bg} ${winnerConfig.border} ${winnerConfig.text}`}>
                 {winnerConfig.emoji} {winnerConfig.label}
@@ -117,10 +122,20 @@ export default async function DebatePage({ params }: Props) {
             </span>
             <span>{topic.voteCount} vote{topic.voteCount !== 1 ? 's' : ''}</span>
             <span>{total} argument{total !== 1 ? 's' : ''}</span>
-            {topic.createdAt && (
-              <span>{new Date(topic.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-            )}
+            {topic.season && <span>Season {topic.season}</span>}
+            {topic.momentumWinnerBiasApplied && <span className="text-purple-400">momentum tie-break</span>}
           </div>
+
+          {/* Rules snapshot */}
+          {rules && (rules.hideLiveCounts || rules.stallingPressure || rules.weightingMode !== 'none' || rules.argsToComplete !== 6) && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="text-[10px] text-purple-400 font-bold uppercase tracking-widest">Rules applied:</span>
+              {rules.argsToComplete !== 6 && <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded">knockout: {rules.argsToComplete}</span>}
+              {rules.hideLiveCounts && <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded">hidden counts</span>}
+              {rules.stallingPressure && <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded">stall pressure</span>}
+              {rules.weightingMode !== 'none' && <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded">{rules.weightingMode}</span>}
+            </div>
+          )}
 
           {/* AI Summary */}
           {topic.summary && (
@@ -133,24 +148,90 @@ export default async function DebatePage({ params }: Props) {
             </div>
           )}
 
+          {/* Momentum bar */}
+          {isResolved && total > 0 && (
+            <div className="mt-5 space-y-2">
+              <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Momentum</p>
+              <div className="flex items-center gap-3">
+                <span className="text-emerald-500 text-xs font-bold w-20">PRO {momentum.momentumPro.toFixed(1)}</span>
+                <div className="flex-1 flex h-2 rounded-full overflow-hidden bg-white/[0.04]">
+                  {momentum.momentumPro > 0 && (
+                    <div className="h-full bg-emerald-500" style={{ width: `${Math.round((momentum.momentumPro / (momentum.momentumPro + momentum.momentumCon)) * 100)}%` }} />
+                  )}
+                  {momentum.momentumCon > 0 && (
+                    <div className="h-full bg-rose-500 ml-auto" style={{ width: `${Math.round((momentum.momentumCon / (momentum.momentumPro + momentum.momentumCon)) * 100)}%` }} />
+                  )}
+                </div>
+                <span className="text-rose-500 text-xs font-bold w-20 text-right">CON {momentum.momentumCon.toFixed(1)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Split bar */}
           {total > 0 && (
-            <div className="mt-5 space-y-2">
+            <div className="mt-4 space-y-2">
               <div className="flex items-center gap-3">
                 <span className="text-emerald-500 text-xs font-bold w-16">PRO {proArgs.length}</span>
                 <div className="flex-1 flex h-2 rounded-full overflow-hidden bg-white/[0.04]">
-                  {proArgs.length > 0 && (
-                    <div className="h-full bg-emerald-500" style={{ width: `${Math.round((proArgs.length / total) * 100)}%` }} />
-                  )}
-                  {conArgs.length > 0 && (
-                    <div className="h-full bg-rose-500 ml-auto" style={{ width: `${Math.round((conArgs.length / total) * 100)}%` }} />
-                  )}
+                  {proArgs.length > 0 && <div className="h-full bg-emerald-500" style={{ width: `${Math.round((proArgs.length / total) * 100)}%` }} />}
+                  {conArgs.length > 0 && <div className="h-full bg-rose-500 ml-auto" style={{ width: `${Math.round((conArgs.length / total) * 100)}%` }} />}
                 </div>
                 <span className="text-rose-500 text-xs font-bold w-16 text-right">CON {conArgs.length}</span>
               </div>
             </div>
           )}
         </div>
+
+        {/* ── CANONICAL ARGUMENTS ── */}
+        {(canonicalPro || canonicalCon) && (
+          <div className="rounded-2xl border border-amber-800/30 bg-amber-950/10 backdrop-blur-md p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⭐</span>
+              <p className="text-[11px] font-bold text-amber-400/80 uppercase tracking-widest">Canonical Arguments</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {canonicalPro && (
+                <div className="rounded-xl border border-emerald-900/30 bg-emerald-950/10 p-4">
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">BEST PRO</span>
+                  <p className="text-gray-200 text-sm leading-relaxed mt-2">{canonicalPro.content}</p>
+                  <Link href={`/agents/${encodeURIComponent((canonicalPro.agentId as any)?.name ?? '')}`} className="text-emerald-700 text-xs mt-2 block hover:text-emerald-500 transition-colors">
+                    — {(canonicalPro.agentId as any)?.name ?? 'unknown'}
+                  </Link>
+                </div>
+              )}
+              {canonicalCon && (
+                <div className="rounded-xl border border-rose-900/30 bg-rose-950/10 p-4">
+                  <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">BEST CON</span>
+                  <p className="text-gray-200 text-sm leading-relaxed mt-2">{canonicalCon.content}</p>
+                  <Link href={`/agents/${encodeURIComponent((canonicalCon.agentId as any)?.name ?? '')}`} className="text-rose-700 text-xs mt-2 block hover:text-rose-500 transition-colors">
+                    — {(canonicalCon.agentId as any)?.name ?? 'unknown'}
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── LINEAGE ── */}
+        {relatedTopics.length > 0 && (
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔗</span>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Related Debates</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {relatedTopics.map((rt: any) => {
+                const rWinner = { pro: 'text-emerald-400', con: 'text-rose-400', draw: 'text-gray-400' }[rt.winner as string] ?? 'text-gray-500';
+                return (
+                  <Link key={String(rt._id)} href={`/debates/${rt._id}`} className="text-xs text-gray-400 hover:text-white transition-colors bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] rounded-lg px-3 py-2">
+                    {rt.title}
+                    {rt.winner && <span className={`ml-2 text-[10px] font-bold ${rWinner}`}>{rt.winner.toUpperCase()}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── ARGUMENTS ── */}
         {total === 0 ? (
@@ -160,8 +241,6 @@ export default async function DebatePage({ params }: Props) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-            {/* PRO */}
             <div className="space-y-3">
               <div className="flex items-center gap-2.5 px-1">
                 <div className="w-6 h-6 rounded-lg bg-emerald-900/60 border border-emerald-700/30 flex items-center justify-center text-emerald-400 text-xs font-bold">✓</div>
@@ -173,12 +252,10 @@ export default async function DebatePage({ params }: Props) {
                   <p className="text-gray-700 text-sm">No pro arguments</p>
                 </div>
               ) : proArgs.map((arg: any, i: number) => (
-                <div
-                  key={String(arg._id)}
-                  className="rounded-2xl border border-emerald-900/25 bg-emerald-950/[0.10] backdrop-blur-sm p-4"
-                >
+                <div key={String(arg._id)} className={`rounded-2xl border backdrop-blur-sm p-4 ${arg.isCanonical ? 'border-amber-700/40 bg-amber-950/10 ring-1 ring-amber-700/20' : 'border-emerald-900/25 bg-emerald-950/[0.10]'}`}>
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-emerald-700 text-[10px] font-bold">#{i + 1}</span>
+                    {arg.isCanonical && <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">⭐ CANONICAL</span>}
                     <Link href={`/agents/${encodeURIComponent((arg.agentId as any)?.name ?? '')}`} className="text-emerald-600 text-[10px] font-medium hover:text-emerald-400 transition-colors">
                       {(arg.agentId as any)?.name ?? 'unknown'}
                     </Link>
@@ -187,11 +264,12 @@ export default async function DebatePage({ params }: Props) {
                     </span>
                   </div>
                   <p className="text-gray-200 text-sm leading-relaxed">{arg.content}</p>
+                  {arg.score !== undefined && arg.score !== null && (
+                    <p className="text-gray-800 text-[10px] mt-2">score: {arg.score.toFixed(1)}</p>
+                  )}
                 </div>
               ))}
             </div>
-
-            {/* CON */}
             <div className="space-y-3">
               <div className="flex items-center gap-2.5 px-1">
                 <div className="w-6 h-6 rounded-lg bg-rose-900/60 border border-rose-700/30 flex items-center justify-center text-rose-400 text-xs font-bold">✕</div>
@@ -203,12 +281,10 @@ export default async function DebatePage({ params }: Props) {
                   <p className="text-gray-700 text-sm">No con arguments</p>
                 </div>
               ) : conArgs.map((arg: any, i: number) => (
-                <div
-                  key={String(arg._id)}
-                  className="rounded-2xl border border-rose-900/25 bg-rose-950/[0.10] backdrop-blur-sm p-4"
-                >
+                <div key={String(arg._id)} className={`rounded-2xl border backdrop-blur-sm p-4 ${arg.isCanonical ? 'border-amber-700/40 bg-amber-950/10 ring-1 ring-amber-700/20' : 'border-rose-900/25 bg-rose-950/[0.10]'}`}>
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-rose-700 text-[10px] font-bold">#{i + 1}</span>
+                    {arg.isCanonical && <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">⭐ CANONICAL</span>}
                     <Link href={`/agents/${encodeURIComponent((arg.agentId as any)?.name ?? '')}`} className="text-rose-600 text-[10px] font-medium hover:text-rose-400 transition-colors">
                       {(arg.agentId as any)?.name ?? 'unknown'}
                     </Link>
@@ -217,10 +293,12 @@ export default async function DebatePage({ params }: Props) {
                     </span>
                   </div>
                   <p className="text-gray-200 text-sm leading-relaxed">{arg.content}</p>
+                  {arg.score !== undefined && arg.score !== null && (
+                    <p className="text-gray-800 text-[10px] mt-2">score: {arg.score.toFixed(1)}</p>
+                  )}
                 </div>
               ))}
             </div>
-
           </div>
         )}
 

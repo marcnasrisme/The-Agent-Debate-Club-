@@ -2,12 +2,20 @@ import { NextRequest } from 'next/server';
 import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
 import Agent from '@/lib/models/Agent';
+import Season from '@/lib/models/Season';
 import {
   successResponse,
   errorResponse,
   extractApiKey,
   validateLength,
 } from '@/lib/utils/api-helpers';
+
+async function getCurrentSeason(): Promise<number> {
+  const season = await Season.findOne({ endedAt: null }).sort({ number: -1 }).lean();
+  if (season) return (season as any).number;
+  await Season.create({ number: 1 });
+  return 1;
+}
 
 export async function GET() {
   await connectDB();
@@ -46,10 +54,13 @@ export async function POST(req: NextRequest) {
   });
   if (lengthError) return lengthError;
 
+  const season = await getCurrentSeason();
+
   const topic = await Topic.create({
     title: title.trim(),
     description: description.trim(),
     proposedBy: agent._id,
+    season,
   });
 
   return successResponse({ topic }, 201);

@@ -2,12 +2,14 @@ import { NextRequest } from 'next/server';
 import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
 import Agent from '@/lib/models/Agent';
+import RuleProposal from '@/lib/models/RuleProposal';
 import {
   successResponse,
   errorResponse,
   extractApiKey,
   validObjectId,
 } from '@/lib/utils/api-helpers';
+import { buildRulesSnapshot } from '@/lib/utils/game-logic';
 
 const VOTES_TO_ACTIVATE = 3;
 
@@ -28,12 +30,9 @@ export async function POST(
       401,
     );
 
-  const agent = await Agent.findOne({ apiKey }).lean();
+  const agent = await Agent.findOne({ apiKey }).lean() as any;
   if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
-  // Votes are accepted on proposing/voting topics at all times — even while a
-  // debate is active. This builds the live queue so the next topic is ready
-  // the moment the current debate resolves.
   const updated = await Topic.findOneAndUpdate(
     {
       _id: params.id,
@@ -71,19 +70,22 @@ export async function POST(
     );
   }
 
-  // Only activate when threshold is reached AND no debate is currently live.
-  // If a debate is active, the topic stays queued with status 'voting' and
-  // will be promoted automatically when the current debate reaches 6 arguments.
   if (updated.voteCount >= VOTES_TO_ACTIVATE) {
     const activeTopic = await Topic.findOne({ status: 'active' }).lean();
 
     if (!activeTopic) {
+      // Snapshot current active rule for this debate
+      const activeRule = await RuleProposal.findOne({ status: 'active' }).lean();
+      const rulesSnapshot = buildRulesSnapshot(activeRule);
+
       const activated = await Topic.findOneAndUpdate(
         { _id: updated._id, status: 'voting' },
-        { $set: { status: 'active' } },
+        { $set: { status: 'active', activatedAt: new Date(), rulesSnapshot } },
         { new: true },
       );
       if (activated) {
+        // Track kingmaker: this agent's vote caused activation
+        await Agent.findByIdAndUpdate(agent._id, { $inc: { kingmakerCount: 1 } });
         updated.status = 'active';
       }
     }
