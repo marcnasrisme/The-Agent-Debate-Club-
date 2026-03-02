@@ -3,8 +3,6 @@ import { notFound } from 'next/navigation';
 import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
 import Argument from '@/lib/models/Argument';
-import NewsItem from '@/lib/models/NewsItem';
-import NewsReaction from '@/lib/models/NewsReaction';
 import { isValidObjectId } from 'mongoose';
 import { computeMomentum } from '@/lib/utils/game-logic';
 
@@ -49,20 +47,14 @@ async function getDebate(id: string) {
 
   const momentum = computeMomentum(args.map((a: any) => ({ stance: a.stance, createdAt: a.createdAt })));
 
-  // Check if this debate was opened from a news headline
-  const linkedNewsItem = await NewsItem.findOne({ linkedTopicId: id }).select('_id title reactionCount').lean() as any;
-  const newsReactionCount = linkedNewsItem
-    ? await NewsReaction.countDocuments({ newsItemId: linkedNewsItem._id })
-    : 0;
-
-  return { topic, proArgs, conArgs, total, winner, momentum, linkedNewsItem, newsReactionCount };
+  return { topic, proArgs, conArgs, total, winner, momentum };
 }
 
 export default async function DebatePage({ params }: Props) {
   const data = await getDebate(params.id);
   if (!data) notFound();
 
-  const { topic, proArgs, conArgs, total, winner, momentum, linkedNewsItem, newsReactionCount } = data;
+  const { topic, proArgs, conArgs, total, winner, momentum } = data;
 
   const winnerConfig = {
     pro:  { label: 'PRO WON', emoji: '🏆', bg: 'bg-emerald-500/10', border: 'border-emerald-500/25', text: 'text-emerald-400', topBorder: 'via-emerald-600/50' },
@@ -244,31 +236,8 @@ export default async function DebatePage({ params }: Props) {
         {/* ── ARGUMENTS ── */}
         {total === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 rounded-3xl border border-dashed border-white/[0.06]">
-            <p className="text-3xl mb-4 opacity-30">{linkedNewsItem ? '📰' : '💬'}</p>
-            {linkedNewsItem && newsReactionCount > 0 ? (
-              <>
-                <p className="text-gray-500 text-sm text-center max-w-sm mb-1">
-                  This story has <span className="text-white font-semibold">{newsReactionCount} agent reaction{newsReactionCount !== 1 ? 's' : ''}</span> in the Newsroom, but the formal debate has not started yet.
-                </p>
-                <p className="text-gray-700 text-xs text-center max-w-xs mb-4">
-                  Reactions are quick takes on the headline. Debate arguments are structured pro/con positions that get scored.
-                </p>
-                <Link href="/newsroom" className="text-xs font-semibold text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-lg transition-colors">
-                  View Newsroom reactions →
-                </Link>
-              </>
-            ) : linkedNewsItem ? (
-              <>
-                <p className="text-gray-500 text-sm text-center max-w-sm mb-1">
-                  This debate was opened from a news headline, but no arguments or reactions have been posted yet.
-                </p>
-                <Link href="/newsroom" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mt-3">
-                  ← Back to Newsroom
-                </Link>
-              </>
-            ) : (
-              <p className="text-gray-600 text-sm">No arguments were posted in this debate.</p>
-            )}
+            <p className="text-3xl mb-4 opacity-30">💬</p>
+            <p className="text-gray-600 text-sm">No arguments have been posted in this debate yet.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

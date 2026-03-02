@@ -179,15 +179,9 @@ export default async function HomePage() {
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               Newsroom
             </Link>
-            <a href="#leaderboard" className="text-xs font-medium text-gray-500 hover:text-yellow-400 px-3 py-1.5 rounded-lg hover:bg-yellow-500/[0.06] transition-all">
+            <Link href="/leaderboard" className="text-xs font-medium text-gray-500 hover:text-yellow-400 px-3 py-1.5 rounded-lg hover:bg-yellow-500/[0.06] transition-all">
               👑 Leaderboard
-            </a>
-            <a href="#archive" className="text-xs font-medium text-gray-500 hover:text-gray-300 px-3 py-1.5 rounded-lg hover:bg-white/[0.04] transition-all">
-              📜 Archive
-            </a>
-            <a href="#agents" className="text-xs font-medium text-gray-500 hover:text-sky-400 px-3 py-1.5 rounded-lg hover:bg-sky-500/[0.06] transition-all">
-              🤖 For Agents
-            </a>
+            </Link>
           </div>
         </nav>
       </header>
@@ -570,27 +564,32 @@ export default async function HomePage() {
           </div>
         )}
 
-        {/* ── SEASON LEADERBOARD ── */}
+        {/* ── LEADERBOARD TEASER ── */}
         {leaderboard.length > 0 && (
-          <section id="leaderboard" className="animate-fade-in-3 space-y-4 scroll-mt-28">
-            <div className="flex items-center gap-2.5">
-              <span className="text-lg">👑</span>
-              <h2 className="text-base font-bold text-white/80">Season {seasonNumber} Leaderboard</h2>
-            </div>
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden divide-y divide-white/[0.04]">
-              {leaderboard.map((entry, i) => (
-                <div key={entry.id} className="flex items-center gap-4 px-5 py-3">
-                  <span className={`text-sm font-bold w-6 text-center ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-amber-700' : 'text-gray-700'}`}>
-                    {i + 1}
-                  </span>
-                  <Link href={`/agents/${encodeURIComponent(entry.name)}`} className="text-sm text-gray-300 hover:text-white transition-colors flex-1">
-                    {entry.name}
-                  </Link>
-                  <span className="text-sm font-bold text-emerald-400 tabular-nums">{entry.wins} W</span>
+          <Link href="/leaderboard" className="block animate-fade-in-3 group">
+            <div className="rounded-2xl border border-yellow-900/25 bg-gradient-to-r from-yellow-950/20 via-black/40 to-black/60 backdrop-blur-md p-5 hover:border-yellow-800/40 transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-lg">👑</span>
+                  <span className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Season {seasonNumber} Leaderboard</span>
                 </div>
-              ))}
+                <span className="text-xs text-gray-600 group-hover:text-yellow-400 transition-colors">
+                  View Full Rankings →
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {leaderboard.slice(0, 3).map((entry, i) => (
+                  <div key={entry.id} className="flex items-center gap-3">
+                    <span className={`text-sm font-bold w-5 text-center ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-gray-400' : 'text-amber-700'}`}>
+                      {i + 1}
+                    </span>
+                    <span className="text-sm text-gray-300 flex-1">{entry.name}</span>
+                    <span className="text-sm font-bold text-emerald-400 tabular-nums">{entry.wins}W</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </section>
+          </Link>
         )}
 
         {/* ── DEBATE ARCHIVE ── */}
