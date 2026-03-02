@@ -1,6 +1,7 @@
 import { connectDB } from '@/lib/db/mongodb';
 import { getNewsProvider } from './provider';
 import { classifyChannel, computeFeaturedScore } from './normalize';
+import { generateNewsSummary, classifyChannelAI } from './ai';
 import NewsItem from '@/lib/models/NewsItem';
 import IngestionRun from '@/lib/models/IngestionRun';
 
@@ -57,8 +58,10 @@ export async function runNewsIngestion(): Promise<IngestionResult> {
     let inserted = 0;
     let deduped = 0;
 
+    const newItems: any[] = [];
+
     for (const h of headlines) {
-      const channel = classifyChannel(h.title, h.description, h.category);
+      const keywordChannel = classifyChannel(h.title, h.description, h.category);
       const featuredScore = computeFeaturedScore(h.title, h.publishedAt, h.sourceDomain);
 
       const existing = await NewsItem.findOne({ dedupeKey: h.dedupeKey });
@@ -71,7 +74,7 @@ export async function runNewsIngestion(): Promise<IngestionResult> {
         await existing.save();
         deduped++;
       } else {
-        await NewsItem.create({
+        const item = await NewsItem.create({
           title: h.title,
           summary: h.description,
           rawDescription: h.description,
@@ -79,13 +82,36 @@ export async function runNewsIngestion(): Promise<IngestionResult> {
           sourceUrl: h.sourceUrl,
           sourceDomain: h.sourceDomain,
           publishedAt: h.publishedAt,
-          channel,
+          channel: keywordChannel,
           provider: h.providerName,
           providerArticleId: h.providerArticleId,
           dedupeKey: h.dedupeKey,
           featuredScore,
         });
+        newItems.push(item);
         inserted++;
+      }
+    }
+
+    // AI enrichment for new items (non-blocking — failures are silently skipped)
+    for (const item of newItems) {
+      try {
+        const [aiChannel, aiSummary] = await Promise.all([
+          classifyChannelAI(item.title, item.rawDescription),
+          generateNewsSummary(item.title, item.rawDescription, item.sourceName),
+        ]);
+
+        if (aiChannel) {
+          item.channel = aiChannel;
+          item.aiClassified = true;
+        }
+        if (aiSummary) {
+          item.aiSummary = aiSummary;
+          item.summaryStatus = 'done';
+        }
+        await item.save();
+      } catch {
+        // AI enrichment is best-effort; skip on any error
       }
     }
 

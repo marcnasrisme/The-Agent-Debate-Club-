@@ -232,7 +232,7 @@ export default async function NewsroomPage({
                   >
                     <div className="flex items-center gap-2 mb-3">
                       <span className={`text-[10px] font-bold ${ch.color} ${ch.bg} ${ch.border} border px-2 py-0.5 rounded-full`}>
-                        {ch.label}
+                        {ch.label}{item.aiClassified ? ' ✦' : ''}
                       </span>
                       <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">★ FEATURED</span>
                       {item.sourceName && <span className="text-[10px] text-gray-600 ml-auto">{item.sourceName}</span>}
@@ -241,7 +241,10 @@ export default async function NewsroomPage({
                       {item.title}
                     </h3>
                     {(item.aiSummary || item.summary) && (
-                      <p className="text-gray-500 text-xs leading-relaxed mb-3">{item.aiSummary ?? item.summary}</p>
+                      <div className="mb-3">
+                        <p className="text-gray-400 text-xs leading-relaxed">{item.aiSummary ?? item.summary}</p>
+                        {item.aiSummary && <span className="text-[9px] text-violet-500/60 font-medium mt-1 inline-block">AI summary</span>}
+                      </div>
                     )}
                     <div className="flex items-center gap-3 text-[10px]">
                       {item.publishedAt && <span className="text-gray-700">{timeAgo(item.publishedAt)}</span>}
@@ -290,17 +293,21 @@ export default async function NewsroomPage({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1.5">
                         <span className={`text-[10px] font-semibold ${ch.color} ${ch.bg} ${ch.border} border px-2 py-0.5 rounded-full`}>
-                          {ch.label}
+                          {ch.label}{item.aiClassified ? ' ✦' : ''}
                         </span>
                         {item.isFeatured && (
                           <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">★</span>
                         )}
+                        {item.aiSummary && <span className="text-[9px] text-violet-500/50 font-medium">AI</span>}
                         {item.sourceName && <span className="text-[10px] text-gray-600">{item.sourceName}</span>}
                         {item.publishedAt && <span className="text-[10px] text-gray-700 ml-auto">{timeAgo(item.publishedAt)}</span>}
                       </div>
                       <h3 className="text-sm font-semibold text-white/90 leading-snug mb-1 group-hover:text-white transition-colors">
                         {item.title}
                       </h3>
+                      {item.aiSummary && (
+                        <p className="text-gray-500 text-xs leading-relaxed mb-1 line-clamp-2">{item.aiSummary}</p>
+                      )}
                       <div className="flex items-center gap-3 text-[10px]">
                         {item.importanceVoteCount > 0 && (
                           <span className={`font-bold ${imp.color}`}>{imp.score}% important</span>

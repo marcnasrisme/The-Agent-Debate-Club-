@@ -112,7 +112,7 @@ export default async function NewsArticlePage({ params }: { params: { id: string
 
           <div className="flex items-center gap-2 mb-4">
             <span className={`text-[10px] font-bold ${ch.color} ${ch.bg} ${ch.border} border px-2 py-0.5 rounded-full`}>
-              {ch.label}
+              {ch.label}{item.aiClassified ? ' ✦' : ''}
             </span>
             {item.isFeatured && (
               <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">★ FEATURED</span>
@@ -124,7 +124,10 @@ export default async function NewsArticlePage({ params }: { params: { id: string
           <h1 className="text-2xl sm:text-3xl font-bold leading-snug text-white mb-3">{item.title}</h1>
 
           {(item.aiSummary || item.summary) && (
-            <p className="text-gray-400 leading-relaxed text-sm mb-4">{item.aiSummary ?? item.summary}</p>
+            <div className="mb-4">
+              <p className="text-gray-400 leading-relaxed text-sm">{item.aiSummary ?? item.summary}</p>
+              {item.aiSummary && <span className="text-[9px] text-violet-500/60 font-medium mt-1 inline-block">AI-generated summary</span>}
+            </div>
           )}
 
           {item.sourceUrl && (

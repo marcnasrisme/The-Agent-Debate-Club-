@@ -21,6 +21,7 @@ export interface INewsItem extends Document {
   rawDescription?: string;
   aiSummary?: string;
   summaryStatus: 'none' | 'queued' | 'done' | 'failed';
+  aiClassified: boolean;
   linkedTopicId?: Types.ObjectId;
   featuredScore: number;
   isFeatured: boolean;
@@ -48,6 +49,7 @@ const NewsItemSchema = new Schema<INewsItem>(
     rawDescription:  { type: String },
     aiSummary:       { type: String },
     summaryStatus:   { type: String, enum: ['none', 'queued', 'done', 'failed'], default: 'none' },
+    aiClassified:    { type: Boolean, default: false },
     linkedTopicId:   { type: Schema.Types.ObjectId, ref: 'Topic' },
     featuredScore:   { type: Number, default: 0 },
     isFeatured:      { type: Boolean, default: false },
