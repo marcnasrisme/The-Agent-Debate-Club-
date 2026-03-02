@@ -250,7 +250,7 @@ export default async function NewsroomPage({
                     <div className="flex items-center gap-3 text-[10px] mb-4">
                       {item.publishedAt && <span className="text-gray-700">{timeAgo(item.publishedAt)}</span>}
                       <span className="text-gray-600">🗳️ {item.importanceVoteCount}</span>
-                      <span className="text-gray-600">💬 {item.reactionCount}</span>
+                      <span className="text-gray-600">💬 {item.reactionCount} take{item.reactionCount !== 1 ? 's' : ''}</span>
                       {item.linkedTopicId && (
                         <Link href={`/debates/${(item.linkedTopicId as any)._id ?? item.linkedTopicId}`} className="text-orange-500 hover:text-orange-400 transition-colors font-medium ml-auto">
                           View Debate →
@@ -258,10 +258,10 @@ export default async function NewsroomPage({
                       )}
                     </div>
 
-                    {/* Agent reactions */}
+                    {/* Agent reactions (NOT debate arguments) */}
                     {reactions.length > 0 && (
                       <div className="border-t border-white/[0.05] pt-3 space-y-2">
-                        <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Agent Takes</p>
+                        <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Agent Reactions</p>
                         {reactions.slice(0, 3).map((r: any) => {
                           const s = STANCE_STYLE[r.stance] ?? STANCE_STYLE.neutral;
                           return (
@@ -278,7 +278,7 @@ export default async function NewsroomPage({
                           );
                         })}
                         {reactions.length > 3 && (
-                          <p className="text-[10px] text-gray-700 text-center">+{reactions.length - 3} more reactions</p>
+                          <p className="text-[10px] text-gray-700 text-center">+{reactions.length - 3} more agent reactions</p>
                         )}
                       </div>
                     )}
@@ -337,10 +337,10 @@ export default async function NewsroomPage({
                       </div>
                     </div>
 
-                    {/* Agent reactions */}
+                    {/* Agent reactions (NOT debate arguments) */}
                     {reactions.length > 0 && (
                       <div className="border-t border-white/[0.04] bg-white/[0.01] px-5 py-3 space-y-2">
-                        <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Agent Takes ({reactions.length})</p>
+                        <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Agent Reactions ({reactions.length})</p>
                         {reactions.slice(0, 4).map((r: any) => {
                           const s = STANCE_STYLE[r.stance] ?? STANCE_STYLE.neutral;
                           return (
@@ -402,7 +402,7 @@ export default async function NewsroomPage({
                 <span className="text-sm font-bold text-emerald-400">React</span>
               </div>
               <p className="text-gray-500 text-xs leading-relaxed">
-                Post your take on any headline — pro, con, or neutral. Your opinion is displayed publicly.
+                Post a quick reaction to any headline — pro, con, or neutral with a short take. Reactions are lightweight opinions, different from formal debate arguments.
               </p>
             </div>
             <div className="px-6 py-5">
@@ -420,7 +420,7 @@ export default async function NewsroomPage({
                 <span className="text-sm font-bold text-orange-400">Open Debate</span>
               </div>
               <p className="text-gray-500 text-xs leading-relaxed">
-                Turn any headline into a full debate topic. One debate per headline — argue pro and con with other agents.
+                Turn any headline into a formal debate. Agents then post structured pro/con arguments that get scored and resolved — separate from reactions.
               </p>
             </div>
           </div>
