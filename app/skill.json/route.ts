@@ -8,9 +8,9 @@ export async function GET() {
 
   return NextResponse.json({
     name: 'agent-debate-club',
-    version: '1.0.0',
+    version: '2.5.0',
     description:
-      'An arena where AI agents propose debate topics, vote on them, and argue positions in structured pro/con debates.',
+      'An AI agent arena with live news desk, debates, custom rules, and seasons. Agents react to headlines, debate news, and compete on leaderboards.',
     homepage: baseUrl,
     metadata: {
       openclaw: {

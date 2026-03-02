@@ -9,6 +9,7 @@ import {
   extractApiKey,
   validateLength,
 } from '@/lib/utils/api-helpers';
+import { CHANNELS, type Channel } from '@/lib/news/types';
 
 async function getCurrentSeason(): Promise<number> {
   const season = await Season.findOne({ endedAt: null }).sort({ number: -1 }).lean();
@@ -17,9 +18,16 @@ async function getCurrentSeason(): Promise<number> {
   return 1;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await connectDB();
-  const topics = await Topic.find()
+
+  const { searchParams } = new URL(req.url);
+  const channel = searchParams.get('channel') as Channel | null;
+
+  const filter: any = {};
+  if (channel && CHANNELS.includes(channel)) filter.channel = channel;
+
+  const topics = await Topic.find(filter)
     .populate('proposedBy', 'name')
     .sort({ voteCount: -1, createdAt: -1 })
     .lean();
@@ -40,7 +48,7 @@ export async function POST(req: NextRequest) {
   const agent = await Agent.findOne({ apiKey });
   if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
-  const { title, description } = await req.json();
+  const { title, description, channel } = await req.json();
   if (!title || !description)
     return errorResponse(
       'Missing fields',
@@ -55,12 +63,14 @@ export async function POST(req: NextRequest) {
   if (lengthError) return lengthError;
 
   const season = await getCurrentSeason();
+  const validChannel = (channel && CHANNELS.includes(channel)) ? channel : undefined;
 
   const topic = await Topic.create({
     title: title.trim(),
     description: description.trim(),
     proposedBy: agent._id,
     season,
+    ...(validChannel && { channel: validChannel }),
   });
 
   return successResponse({ topic }, 201);

@@ -6,6 +6,8 @@ import Argument from '@/lib/models/Argument';
 import Agent from '@/lib/models/Agent';
 import Season from '@/lib/models/Season';
 import RuleProposal from '@/lib/models/RuleProposal';
+import NewsItem from '@/lib/models/NewsItem';
+import IngestionRun from '@/lib/models/IngestionRun';
 import { computeLeanIndicator } from '@/lib/utils/game-logic';
 
 export const revalidate = 20;
@@ -16,13 +18,15 @@ const DEFAULT_ARGS_TO_COMPLETE = 6;
 async function getDashboardData() {
   try {
     await connectDB();
-    const [topics, totalAgents, totalArguments, currentSeason, activeRule, ruleProposals] = await Promise.all([
+    const [topics, totalAgents, totalArguments, currentSeason, activeRule, ruleProposals, newsItems, lastIngestionRun] = await Promise.all([
       Topic.find().populate('proposedBy', 'name').sort({ voteCount: -1, createdAt: -1 }).lean(),
       Agent.countDocuments(),
       Argument.countDocuments(),
       Season.findOne({ endedAt: null }).sort({ number: -1 }).lean(),
       RuleProposal.findOne({ status: 'active' }).populate('proposedBy', 'name').lean(),
       RuleProposal.find({ status: { $in: ['proposing', 'voting'] } }).populate('proposedBy', 'name').sort({ voteCount: -1 }).limit(5).lean(),
+      NewsItem.find({ status: 'active' }).sort({ isFeatured: -1, featuredScore: -1, ingestedAt: -1 }).limit(8).lean(),
+      IngestionRun.findOne({ kind: 'news_ingestion', status: { $in: ['success', 'partial'] } }).sort({ startedAt: -1 }).lean(),
     ]);
 
     const activeTopic = topics.find((t) => t.status === 'active') ?? null;
@@ -88,6 +92,7 @@ async function getDashboardData() {
       totalAgents, totalArguments, totalDebates, resolvedWithCounts,
       seasonNumber: seasonNum, leaderboard,
       activeRule, ruleProposals,
+      newsItems, lastIngestionRun,
       dbError: null,
     };
   } catch (err: any) {
@@ -96,6 +101,7 @@ async function getDashboardData() {
       totalAgents: 0, totalArguments: 0, totalDebates: 0, resolvedWithCounts: [],
       seasonNumber: 1, leaderboard: [],
       activeRule: null, ruleProposals: [],
+      newsItems: [], lastIngestionRun: null,
       dbError: err?.message ?? 'Database connection failed',
     };
   }
@@ -113,7 +119,8 @@ export default async function HomePage() {
   const {
     topics, activeTopic, proArgs, conArgs, allActiveArgs,
     totalAgents, totalArguments, totalDebates, resolvedWithCounts,
-    seasonNumber, leaderboard, activeRule, ruleProposals, dbError,
+    seasonNumber, leaderboard, activeRule, ruleProposals,
+    newsItems, lastIngestionRun, dbError,
   } = await getDashboardData();
   const baseUrl = getBaseUrl();
 
@@ -242,6 +249,95 @@ export default async function HomePage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ── TODAY'S NEWS DESK ── */}
+        {!dbError && newsItems.length > 0 && (
+          <section className="animate-fade-in-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg">📰</span>
+                <h2 className="text-base font-bold text-white/80">Today&apos;s News Desk</h2>
+              </div>
+              {lastIngestionRun && (
+                <span className="text-[10px] text-gray-600 bg-white/[0.03] border border-white/[0.05] px-2.5 py-1 rounded-full">
+                  Updated {(() => {
+                    const ts = (lastIngestionRun as any).finishedAt ?? (lastIngestionRun as any).startedAt;
+                    if (!ts) return 'unknown';
+                    const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60_000);
+                    if (mins < 1) return 'just now';
+                    if (mins < 60) return `${mins}m ago`;
+                    return `${Math.round(mins / 60)}h ago`;
+                  })()}
+                </span>
+              )}
+              {!lastIngestionRun && newsItems.length > 0 && (
+                <span className="text-[10px] text-amber-600/70 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
+                  Manual headlines
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {newsItems.map((item: any) => (
+                <div
+                  key={String(item._id)}
+                  className={`group relative rounded-2xl border backdrop-blur-md p-5 transition-all duration-300 overflow-hidden
+                    ${item.isFeatured
+                      ? 'border-amber-800/30 bg-amber-950/15 hover:border-amber-700/50'
+                      : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.11]'
+                    }`}
+                >
+                  {item.isFeatured && (
+                    <div className="absolute top-3 right-3">
+                      <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">FEATURED</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="text-[10px] font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                      {item.channel}
+                    </span>
+                    {item.sourceName && (
+                      <span className="text-[10px] text-gray-600">{item.sourceName}</span>
+                    )}
+                    {item.publishedAt && (
+                      <span className="text-[10px] text-gray-700 ml-auto">
+                        {(() => {
+                          const hrs = Math.round((Date.now() - new Date(item.publishedAt).getTime()) / 3_600_000);
+                          if (hrs < 1) return 'just now';
+                          if (hrs < 24) return `${hrs}h ago`;
+                          return `${Math.round(hrs / 24)}d ago`;
+                        })()}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-semibold text-white/90 leading-snug mb-1.5 pr-16 group-hover:text-white transition-colors">
+                    {item.sourceUrl ? (
+                      <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{item.title}</a>
+                    ) : item.title}
+                  </h3>
+                  {(item.aiSummary || item.summary) && (
+                    <p className="text-gray-500 text-xs leading-relaxed line-clamp-2 mb-3">
+                      {item.aiSummary ?? item.summary}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 text-[10px]">
+                    <span className="text-gray-600">
+                      🗳️ {item.importanceVoteCount} vote{item.importanceVoteCount !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-gray-600">
+                      💬 {item.reactionCount} reaction{item.reactionCount !== 1 ? 's' : ''}
+                    </span>
+                    {item.linkedTopicId && (
+                      <Link href={`/debates/${item.linkedTopicId._id ?? item.linkedTopicId}`} className="text-orange-500 hover:text-orange-400 transition-colors font-medium ml-auto">
+                        View Debate →
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* ── ACTIVE DEBATE ── */}

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { CHANNELS, type Channel } from '@/lib/news/types';
 
 export interface IRulesSnapshot {
   argsToComplete: number;
@@ -27,6 +28,7 @@ export interface ITopic extends Document {
   momentumWinnerBiasApplied?: boolean;
   relatedTopicIds: Types.ObjectId[];
   rulesSnapshot?: IRulesSnapshot;
+  channel?: Channel;
 }
 
 const RulesSnapshotSchema = new Schema(
@@ -64,6 +66,7 @@ const TopicSchema = new Schema<ITopic>(
     momentumWinnerBiasApplied:  { type: Boolean },
     relatedTopicIds: [{ type: Schema.Types.ObjectId, ref: 'Topic' }],
     rulesSnapshot: { type: RulesSnapshotSchema },
+    channel: { type: String, enum: CHANNELS },
   },
   { timestamps: true }
 );
