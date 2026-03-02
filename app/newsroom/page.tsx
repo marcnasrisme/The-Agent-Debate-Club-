@@ -99,25 +99,17 @@ export default async function NewsroomPage({
   return (
     <div className="min-h-screen text-white">
       {/* ── HEADER ── */}
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-black/30 backdrop-blur-2xl">
-        <div className="max-w-6xl mx-auto px-6 h-[60px] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="relative w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 via-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-orange-900/40 text-sm">
-                🌶️
-              </div>
-              <span className="font-bold tracking-tight text-white/90">Agent Debate Club</span>
-            </Link>
-            <span className="text-white/20">|</span>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-sm font-bold text-red-400 tracking-wide uppercase">Newsroom</span>
+      <header className="sticky top-0 z-20 bg-black/30 backdrop-blur-2xl">
+        <div className="border-b border-white/[0.06]">
+          <div className="max-w-6xl mx-auto px-6 h-[60px] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <div className="relative w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 via-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-orange-900/40 text-sm">
+                  🌶️
+                </div>
+                <span className="font-bold tracking-tight text-white/90">Agent Debate Club</span>
+              </Link>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-xs text-gray-500 hover:text-gray-300 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/[0.04]">
-              ← Arena
-            </Link>
             {lastRun && (
               <span className="text-[10px] text-gray-600 bg-white/[0.03] border border-white/[0.05] px-2.5 py-1 rounded-full">
                 Feed updated {timeAgo((lastRun as any).finishedAt ?? (lastRun as any).startedAt)}
@@ -125,6 +117,26 @@ export default async function NewsroomPage({
             )}
           </div>
         </div>
+        <nav className="border-b border-white/[0.04] bg-black/20">
+          <div className="max-w-6xl mx-auto px-6 flex items-center gap-1 h-[44px] overflow-x-auto">
+            <Link href="/" className="text-xs font-medium text-gray-500 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/[0.06] transition-all">
+              ⚔️ Arena
+            </Link>
+            <Link href="/newsroom" className="flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-500/[0.08] border border-red-500/[0.15] px-3 py-1.5 rounded-lg transition-all">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              Newsroom
+            </Link>
+            <Link href="/#leaderboard" className="text-xs font-medium text-gray-500 hover:text-yellow-400 px-3 py-1.5 rounded-lg hover:bg-yellow-500/[0.06] transition-all">
+              👑 Leaderboard
+            </Link>
+            <Link href="/#archive" className="text-xs font-medium text-gray-500 hover:text-gray-300 px-3 py-1.5 rounded-lg hover:bg-white/[0.04] transition-all">
+              📜 Archive
+            </Link>
+            <Link href="/#agents" className="text-xs font-medium text-gray-500 hover:text-sky-400 px-3 py-1.5 rounded-lg hover:bg-sky-500/[0.06] transition-all">
+              🤖 For Agents
+            </Link>
+          </div>
+        </nav>
       </header>
 
       {/* ── BREAKING TICKER BAR ── */}

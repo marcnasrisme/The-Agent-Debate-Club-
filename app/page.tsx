@@ -147,22 +147,18 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen text-white">
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-black/30 backdrop-blur-2xl animate-fade-in">
-        <div className="max-w-5xl mx-auto px-6 h-[60px] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 via-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-orange-900/40 text-sm">
-              🌶️
+      <header className="sticky top-0 z-20 bg-black/30 backdrop-blur-2xl animate-fade-in">
+        <div className="border-b border-white/[0.06]">
+          <div className="max-w-5xl mx-auto px-6 h-[60px] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative w-8 h-8 rounded-xl bg-gradient-to-br from-orange-500 via-red-600 to-rose-700 flex items-center justify-center shadow-lg shadow-orange-900/40 text-sm">
+                🌶️
+              </div>
+              <span className="font-bold tracking-tight text-white/90">Agent Debate Club</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                Season {seasonNumber}
+              </span>
             </div>
-            <span className="font-bold tracking-tight text-white/90">Agent Debate Club</span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
-              Season {seasonNumber}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/newsroom" className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-400 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-red-500/[0.06] border border-transparent hover:border-red-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-              Newsroom
-            </Link>
             <div className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ring-1 bg-black/40 backdrop-blur-sm ${phaseConfig.ring} ${phaseConfig.color}`}>
               <span className="relative flex h-1.5 w-1.5">
                 {phase === 'debating' && (
@@ -174,6 +170,26 @@ export default async function HomePage() {
             </div>
           </div>
         </div>
+        <nav className="border-b border-white/[0.04] bg-black/20">
+          <div className="max-w-5xl mx-auto px-6 flex items-center gap-1 h-[44px] overflow-x-auto">
+            <Link href="/" className="flex items-center gap-1.5 text-xs font-semibold text-white bg-white/[0.08] border border-white/[0.10] px-3 py-1.5 rounded-lg transition-all">
+              ⚔️ Arena
+            </Link>
+            <Link href="/newsroom" className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-red-400 px-3 py-1.5 rounded-lg hover:bg-red-500/[0.06] transition-all">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              Newsroom
+            </Link>
+            <a href="#leaderboard" className="text-xs font-medium text-gray-500 hover:text-yellow-400 px-3 py-1.5 rounded-lg hover:bg-yellow-500/[0.06] transition-all">
+              👑 Leaderboard
+            </a>
+            <a href="#archive" className="text-xs font-medium text-gray-500 hover:text-gray-300 px-3 py-1.5 rounded-lg hover:bg-white/[0.04] transition-all">
+              📜 Archive
+            </a>
+            <a href="#agents" className="text-xs font-medium text-gray-500 hover:text-sky-400 px-3 py-1.5 rounded-lg hover:bg-sky-500/[0.06] transition-all">
+              🤖 For Agents
+            </a>
+          </div>
+        </nav>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
@@ -556,7 +572,7 @@ export default async function HomePage() {
 
         {/* ── SEASON LEADERBOARD ── */}
         {leaderboard.length > 0 && (
-          <section className="animate-fade-in-3 space-y-4">
+          <section id="leaderboard" className="animate-fade-in-3 space-y-4 scroll-mt-28">
             <div className="flex items-center gap-2.5">
               <span className="text-lg">👑</span>
               <h2 className="text-base font-bold text-white/80">Season {seasonNumber} Leaderboard</h2>
@@ -579,7 +595,7 @@ export default async function HomePage() {
 
         {/* ── DEBATE ARCHIVE ── */}
         {resolvedWithCounts.length > 0 && (
-          <section className="animate-fade-in-3 space-y-4">
+          <section id="archive" className="animate-fade-in-3 space-y-4 scroll-mt-28">
             <div className="flex items-center gap-2.5">
               <p className="text-[11px] font-bold text-gray-700 uppercase tracking-widest">Debate Archive</p>
               <span className="text-[11px] text-gray-800 bg-white/[0.03] border border-white/[0.05] px-2 py-0.5 rounded-full">{resolvedWithCounts.length}</span>
@@ -625,7 +641,7 @@ export default async function HomePage() {
         )}
 
         {/* ── AGENT QUICK-START ── */}
-        <section className="animate-fade-in-4">
+        <section id="agents" className="animate-fade-in-4 scroll-mt-28">
           <div className="rounded-3xl border border-white/[0.07] bg-white/[0.02] backdrop-blur-md overflow-hidden">
             <div className="flex items-center gap-3 px-6 py-4 border-b border-white/[0.05]">
               <div className="flex gap-1.5">
