@@ -158,14 +158,20 @@ export default async function HomePage() {
               Season {seasonNumber}
             </span>
           </div>
-          <div className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ring-1 bg-black/40 backdrop-blur-sm ${phaseConfig.ring} ${phaseConfig.color}`}>
-            <span className="relative flex h-1.5 w-1.5">
-              {phase === 'debating' && (
-                <span className={`animate-live-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${phaseConfig.dot}`} />
-              )}
-              <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${phaseConfig.dot}`} />
-            </span>
-            {phaseConfig.label}
+          <div className="flex items-center gap-3">
+            <Link href="/newsroom" className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-red-400 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-red-500/[0.06] border border-transparent hover:border-red-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              Newsroom
+            </Link>
+            <div className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ring-1 bg-black/40 backdrop-blur-sm ${phaseConfig.ring} ${phaseConfig.color}`}>
+              <span className="relative flex h-1.5 w-1.5">
+                {phase === 'debating' && (
+                  <span className={`animate-live-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${phaseConfig.dot}`} />
+                )}
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${phaseConfig.dot}`} />
+              </span>
+              {phaseConfig.label}
+            </div>
           </div>
         </div>
       </header>
@@ -251,93 +257,38 @@ export default async function HomePage() {
           </div>
         )}
 
-        {/* ── TODAY'S NEWS DESK ── */}
+        {/* ── NEWS DESK TEASER ── */}
         {!dbError && newsItems.length > 0 && (
-          <section className="animate-fade-in-2 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="text-lg">📰</span>
-                <h2 className="text-base font-bold text-white/80">Today&apos;s News Desk</h2>
+          <Link href="/newsroom" className="block animate-fade-in-2 group">
+            <div className="rounded-2xl border border-red-900/25 bg-gradient-to-r from-red-950/20 via-black/40 to-black/60 backdrop-blur-md p-5 hover:border-red-800/40 transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-xs font-bold text-red-400 uppercase tracking-widest">Newsroom</span>
+                  <span className="text-[10px] text-gray-600">{newsItems.length} stories</span>
+                </div>
+                <span className="text-xs text-gray-600 group-hover:text-red-400 transition-colors">
+                  Open Newsroom →
+                </span>
               </div>
-              {lastIngestionRun && (
-                <span className="text-[10px] text-gray-600 bg-white/[0.03] border border-white/[0.05] px-2.5 py-1 rounded-full">
-                  Updated {(() => {
-                    const ts = (lastIngestionRun as any).finishedAt ?? (lastIngestionRun as any).startedAt;
-                    if (!ts) return 'unknown';
-                    const mins = Math.round((Date.now() - new Date(ts).getTime()) / 60_000);
-                    if (mins < 1) return 'just now';
-                    if (mins < 60) return `${mins}m ago`;
-                    return `${Math.round(mins / 60)}h ago`;
-                  })()}
-                </span>
-              )}
-              {!lastIngestionRun && newsItems.length > 0 && (
-                <span className="text-[10px] text-amber-600/70 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
-                  Manual headlines
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {newsItems.map((item: any) => (
-                <div
-                  key={String(item._id)}
-                  className={`group relative rounded-2xl border backdrop-blur-md p-5 transition-all duration-300 overflow-hidden
-                    ${item.isFeatured
-                      ? 'border-amber-800/30 bg-amber-950/15 hover:border-amber-700/50'
-                      : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.11]'
-                    }`}
-                >
-                  {item.isFeatured && (
-                    <div className="absolute top-3 right-3">
-                      <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">FEATURED</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2 mb-2.5">
-                    <span className="text-[10px] font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+              <div className="space-y-1.5">
+                {newsItems.slice(0, 3).map((item: any) => (
+                  <div key={String(item._id)} className="flex items-center gap-2.5">
+                    <span className="text-[9px] font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded shrink-0">
                       {item.channel}
                     </span>
-                    {item.sourceName && (
-                      <span className="text-[10px] text-gray-600">{item.sourceName}</span>
-                    )}
-                    {item.publishedAt && (
-                      <span className="text-[10px] text-gray-700 ml-auto">
-                        {(() => {
-                          const hrs = Math.round((Date.now() - new Date(item.publishedAt).getTime()) / 3_600_000);
-                          if (hrs < 1) return 'just now';
-                          if (hrs < 24) return `${hrs}h ago`;
-                          return `${Math.round(hrs / 24)}d ago`;
-                        })()}
-                      </span>
+                    <p className="text-sm text-gray-300 truncate">{item.title}</p>
+                    {item.reactionCount > 0 && (
+                      <span className="text-[10px] text-gray-600 shrink-0">💬 {item.reactionCount}</span>
                     )}
                   </div>
-                  <h3 className="text-sm font-semibold text-white/90 leading-snug mb-1.5 pr-16 group-hover:text-white transition-colors">
-                    {item.sourceUrl ? (
-                      <a href={item.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{item.title}</a>
-                    ) : item.title}
-                  </h3>
-                  {(item.aiSummary || item.summary) && (
-                    <p className="text-gray-500 text-xs leading-relaxed line-clamp-2 mb-3">
-                      {item.aiSummary ?? item.summary}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3 text-[10px]">
-                    <span className="text-gray-600">
-                      🗳️ {item.importanceVoteCount} vote{item.importanceVoteCount !== 1 ? 's' : ''}
-                    </span>
-                    <span className="text-gray-600">
-                      💬 {item.reactionCount} reaction{item.reactionCount !== 1 ? 's' : ''}
-                    </span>
-                    {item.linkedTopicId && (
-                      <Link href={`/debates/${item.linkedTopicId._id ?? item.linkedTopicId}`} className="text-orange-500 hover:text-orange-400 transition-colors font-medium ml-auto">
-                        View Debate →
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              {newsItems.length > 3 && (
+                <p className="text-[10px] text-gray-700 mt-2">+{newsItems.length - 3} more headlines</p>
+              )}
             </div>
-          </section>
+          </Link>
         )}
 
         {/* ── ACTIVE DEBATE ── */}
