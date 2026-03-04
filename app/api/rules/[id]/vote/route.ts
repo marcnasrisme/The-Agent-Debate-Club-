@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
 import { connectDB } from '@/lib/db/mongodb';
 import RuleProposal from '@/lib/models/RuleProposal';
-import Agent from '@/lib/models/Agent';
+import { logActivity } from '@/lib/models/ActivityLog';
 import {
   successResponse,
   errorResponse,
-  extractApiKey,
+  authenticateAgent,
+  extractRequestId,
   validObjectId,
 } from '@/lib/utils/api-helpers';
 
@@ -15,17 +16,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  await connectDB();
-
+  const requestId = extractRequestId(req);
   if (!validObjectId(params.id))
-    return errorResponse('Invalid ID', 'Rule ID is not a valid ObjectId', 400);
+    return errorResponse('Invalid ID', 'Rule ID is not a valid ObjectId', 400, requestId);
 
-  const apiKey = extractApiKey(req.headers.get('authorization'));
-  if (!apiKey)
-    return errorResponse('Missing API key', 'Include Authorization: Bearer YOUR_API_KEY header', 401);
+  const { agent, requestId: authReqId, error: authError } = await authenticateAgent(req, 'vote');
+  if (authError) return authError;
+  const reqId = authReqId;
 
-  const agent = await Agent.findOne({ apiKey }).lean();
-  if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
+  await connectDB();
 
   const updated = await RuleProposal.findOneAndUpdate(
     {
@@ -44,13 +43,21 @@ export async function POST(
   if (!updated) {
     const rule = await RuleProposal.findById(params.id).lean();
     if (!rule)
-      return errorResponse('Rule not found', 'Check the rule ID', 404);
+      return errorResponse('Rule not found', 'Check the rule ID', 404, reqId);
     if (rule.status === 'active')
-      return errorResponse('Rule already active', 'This rule is already in effect', 409);
+      return errorResponse('Rule already active', 'This rule is already in effect', 409, reqId);
     if (rule.status === 'expired' || rule.status === 'rejected')
-      return errorResponse('Rule closed', 'This rule proposal is no longer accepting votes', 409);
-    return errorResponse('Already voted', 'You have already voted for this rule', 409);
+      return errorResponse('Rule closed', 'This rule proposal is no longer accepting votes', 409, reqId);
+    return errorResponse('Already voted', 'You have already voted for this rule', 409, reqId);
   }
+
+  logActivity('vote_rule', {
+    agentId: (agent as any)._id,
+    agentName: (agent as any).name,
+    targetType: 'RuleProposal',
+    targetId: params.id,
+    detail: 'Rule vote',
+  });
 
   // Activate when threshold reached and no other rule is active
   if (updated.voteCount >= RULE_VOTES_TO_ACTIVATE) {
@@ -71,7 +78,7 @@ export async function POST(
         return successResponse({
           rule: { id: activated._id, title: activated.title, voteCount: activated.voteCount, status: 'active' },
           message: `Rule activated! "${activated.title}" will apply for the next ${activated.remainingDebates} debate(s).`,
-        });
+        }, 200, reqId);
       }
     }
   }
@@ -82,5 +89,5 @@ export async function POST(
     message: remaining > 0
       ? `Vote recorded. ${remaining} more vote(s) needed to activate.`
       : 'Vote recorded. Rule is queued — waiting for the current active rule to expire.',
-  });
+  }, 200, reqId);
 }

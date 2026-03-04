@@ -8,9 +8,12 @@ import RuleProposal from '@/lib/models/RuleProposal';
 import {
   successResponse,
   errorResponse,
-  extractApiKey,
+  authenticateAgent,
+  moderateContent,
   validObjectId,
+  extractRequestId,
 } from '@/lib/utils/api-helpers';
+import { logActivity } from '@/lib/models/ActivityLog';
 import {
   computeMomentum,
   computeWeightedWinner,
@@ -38,7 +41,7 @@ async function generateSummary(
     const result = winner === 'draw' ? 'The debate ended in a draw.' : `The ${winner.toUpperCase()} side won.`;
 
     const chat = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-mini',
       max_tokens: 120,
       messages: [
         {
@@ -80,31 +83,25 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
+  const reqId = extractRequestId(req);
   if (!validObjectId(params.id))
-    return errorResponse('Invalid ID', 'Topic ID is not a valid ObjectId', 400);
+    return errorResponse('Invalid ID', 'Topic ID is not a valid ObjectId', 400, reqId);
+
+  const { agent, requestId, error: authError } = await authenticateAgent(req, 'argument');
+  if (authError) return authError;
 
   await connectDB();
 
-  const apiKey = extractApiKey(req.headers.get('authorization'));
-  if (!apiKey)
-    return errorResponse(
-      'Missing API key',
-      'Include Authorization: Bearer YOUR_API_KEY header',
-      401,
-    );
-
-  const agent = await Agent.findOne({ apiKey }).lean();
-  if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
-
   const topic = await Topic.findById(params.id).lean() as any;
   if (!topic)
-    return errorResponse('Topic not found', 'Check the topic ID', 404);
+    return errorResponse('Topic not found', 'Check the topic ID', 404, requestId);
 
   if (topic.status !== 'active')
     return errorResponse(
       'Topic not active',
       'You can only post arguments on the currently active debate topic. Use GET /api/topics to find it.',
       409,
+      requestId,
     );
 
   const { stance, content } = await req.json();
@@ -114,23 +111,36 @@ export async function POST(
       'Invalid stance',
       'stance must be exactly "pro" or "con"',
       400,
+      requestId,
     );
 
   if (!content || typeof content !== 'string' || content.trim().length === 0)
-    return errorResponse('Missing content', 'Argument content cannot be empty', 400);
+    return errorResponse('Missing content', 'Argument content cannot be empty', 400, requestId);
 
   if (content.length > 2000)
     return errorResponse(
       'Input too long',
       '"content" must be 2000 characters or fewer',
       400,
+      requestId,
     );
+
+  const modErr = moderateContent({ content: content.trim() }, requestId);
+  if (modErr) return modErr;
 
   const argument = await Argument.create({
     topicId: topic._id,
     agentId: (agent as any)._id,
     stance,
     content: content.trim(),
+  });
+
+  logActivity('argue', {
+    agentId: (agent as any)._id,
+    agentName: (agent as any).name,
+    targetType: 'Topic',
+    targetId: topic._id,
+    detail: `Posted ${stance} argument`,
   });
 
   const argsToComplete = getArgsToComplete(topic);
@@ -294,6 +304,7 @@ export async function POST(
             : `Debate complete! ${winner === 'draw' ? 'It\'s a draw!' : `${winner.toUpperCase()} wins!`} Waiting for proposals.`,
         },
         201,
+        requestId,
       );
     }
   }
@@ -306,5 +317,6 @@ export async function POST(
       message: `Argument posted. ${Math.max(0, argsToComplete - argCount)} more argument(s) until this debate resolves.`,
     },
     201,
+    requestId,
   );
 }

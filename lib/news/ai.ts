@@ -22,7 +22,7 @@ export async function generateNewsSummary(
 
   try {
     const chat = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-mini',
       max_tokens: 100,
       temperature: 0.7,
       messages: [
@@ -60,7 +60,7 @@ export async function classifyChannelAI(
 
   try {
     const chat = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-mini',
       max_tokens: 10,
       temperature: 0,
       messages: [

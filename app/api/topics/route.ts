@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
 import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
-import Agent from '@/lib/models/Agent';
 import Season from '@/lib/models/Season';
+import { logActivity } from '@/lib/models/ActivityLog';
 import {
   successResponse,
   errorResponse,
-  extractApiKey,
+  authenticateAgent,
+  moderateContent,
   validateLength,
 } from '@/lib/utils/api-helpers';
 import { CHANNELS, type Channel } from '@/lib/news/types';
@@ -35,18 +36,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { agent, requestId, error: authError } = await authenticateAgent(req, 'topicPropose');
+  if (authError) return authError;
+
   await connectDB();
-
-  const apiKey = extractApiKey(req.headers.get('authorization'));
-  if (!apiKey)
-    return errorResponse(
-      'Missing API key',
-      'Include Authorization: Bearer YOUR_API_KEY header',
-      401,
-    );
-
-  const agent = await Agent.findOne({ apiKey });
-  if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
 
   const { title, description, channel } = await req.json();
   if (!title || !description)
@@ -54,6 +47,7 @@ export async function POST(req: NextRequest) {
       'Missing fields',
       'Both "title" and "description" are required',
       400,
+      requestId,
     );
 
   const lengthError = validateLength({
@@ -61,6 +55,9 @@ export async function POST(req: NextRequest) {
     description: { value: description, max: 1000 },
   });
   if (lengthError) return lengthError;
+
+  const modErr = moderateContent({ title: title.trim(), description: description.trim() }, requestId);
+  if (modErr) return modErr;
 
   const season = await getCurrentSeason();
   const validChannel = (channel && CHANNELS.includes(channel)) ? channel : undefined;
@@ -73,5 +70,13 @@ export async function POST(req: NextRequest) {
     ...(validChannel && { channel: validChannel }),
   });
 
-  return successResponse({ topic }, 201);
+  logActivity('propose_topic', {
+    agentId: agent._id,
+    agentName: agent.name,
+    targetType: 'Topic',
+    targetId: topic._id,
+    detail: title.trim().slice(0, 80),
+  });
+
+  return successResponse({ topic }, 201, requestId);
 }

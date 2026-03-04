@@ -27,6 +27,8 @@ export interface IAgent extends Document {
   archetypeTag?: ArchetypeTag;
   statsCache?: IStatsCache;
   kingmakerCount: number;
+  banned: boolean;
+  banReason?: string;
 }
 
 const StatsCacheSchema = new Schema(
@@ -58,6 +60,8 @@ const AgentSchema = new Schema<IAgent>(
     archetypeTag: { type: String, enum: ARCHETYPE_TAGS },
     statsCache: { type: StatsCacheSchema },
     kingmakerCount: { type: Number, default: 0 },
+    banned:         { type: Boolean, default: false },
+    banReason:      { type: String },
   },
   { timestamps: true }
 );

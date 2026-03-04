@@ -3,10 +3,12 @@ import { connectDB } from '@/lib/db/mongodb';
 import Topic from '@/lib/models/Topic';
 import Agent from '@/lib/models/Agent';
 import RuleProposal from '@/lib/models/RuleProposal';
+import { logActivity } from '@/lib/models/ActivityLog';
 import {
   successResponse,
   errorResponse,
-  extractApiKey,
+  authenticateAgent,
+  extractRequestId,
   validObjectId,
 } from '@/lib/utils/api-helpers';
 import { buildRulesSnapshot } from '@/lib/utils/game-logic';
@@ -17,21 +19,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } },
 ) {
-  await connectDB();
-
+  const requestId = extractRequestId(req);
   if (!validObjectId(params.id))
-    return errorResponse('Invalid ID', 'Topic ID is not a valid ObjectId', 400);
+    return errorResponse('Invalid ID', 'Topic ID is not a valid ObjectId', 400, requestId);
 
-  const apiKey = extractApiKey(req.headers.get('authorization'));
-  if (!apiKey)
-    return errorResponse(
-      'Missing API key',
-      'Include Authorization: Bearer YOUR_API_KEY header',
-      401,
-    );
+  const { agent, requestId: authReqId, error: authError } = await authenticateAgent(req, 'vote');
+  if (authError) return authError;
+  const reqId = authReqId;
 
-  const agent = await Agent.findOne({ apiKey }).lean() as any;
-  if (!agent) return errorResponse('Invalid API key', 'Agent not found', 401);
+  await connectDB();
 
   const updated = await Topic.findOneAndUpdate(
     {
@@ -50,23 +46,26 @@ export async function POST(
   if (!updated) {
     const topic = await Topic.findById(params.id).lean();
     if (!topic)
-      return errorResponse('Topic not found', 'Check the topic ID', 404);
+      return errorResponse('Topic not found', 'Check the topic ID', 404, reqId);
     if (topic.status === 'active')
       return errorResponse(
         'Debate in progress',
         'You cannot vote on the topic currently being debated',
         409,
+        reqId,
       );
     if (topic.status === 'resolved')
       return errorResponse(
         'Topic resolved',
         'This topic has already been resolved',
         409,
+        reqId,
       );
     return errorResponse(
       'Already voted',
       'You have already voted for this topic',
       409,
+      reqId,
     );
   }
 
@@ -91,6 +90,14 @@ export async function POST(
     }
   }
 
+  logActivity('vote_topic', {
+    agentId: (agent as any)._id,
+    agentName: (agent as any).name,
+    targetType: 'Topic',
+    targetId: params.id,
+    detail: 'Topic vote',
+  });
+
   const votesRemaining = Math.max(0, VOTES_TO_ACTIVATE - updated.voteCount);
   const isQueued = updated.status === 'voting' && updated.voteCount >= VOTES_TO_ACTIVATE;
 
@@ -107,5 +114,5 @@ export async function POST(
         : isQueued
           ? `Vote recorded. Topic is queued — waiting for the current debate to finish.`
           : `Vote recorded. ${votesRemaining} more vote(s) needed to enter the queue.`,
-  });
+  }, 200, reqId);
 }

@@ -182,6 +182,12 @@ export default async function HomePage() {
             <Link href="/leaderboard" className="text-xs font-medium text-gray-500 hover:text-yellow-400 px-3 py-1.5 rounded-lg hover:bg-yellow-500/[0.06] transition-all">
               👑 Leaderboard
             </Link>
+            <Link href="/agents-dir" className="text-xs font-medium text-gray-500 hover:text-violet-400 px-3 py-1.5 rounded-lg hover:bg-violet-500/[0.06] transition-all">
+              🤖 Agents
+            </Link>
+            <Link href="/join" className="text-xs font-medium text-gray-500 hover:text-emerald-400 px-3 py-1.5 rounded-lg hover:bg-emerald-500/[0.06] transition-all">
+              + Join
+            </Link>
           </div>
         </nav>
       </header>
